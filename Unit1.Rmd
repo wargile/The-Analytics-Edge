@@ -1,0 +1,215 @@
+---
+title: "The Analytics Edge "
+author: "Na Sai"
+date: "March 13, 2015"
+output: html_document
+---
+# Assignment1
+## An analytical detective
+Crime is an international concern, but it is documented and handled in very different ways in different countries. In the United States, violent crimes and property crimes are recorded by the Federal Bureau of Investigation (FBI).  Additionally, each city documents crime, and some cities release data regarding crime rates. The city of Chicago, Illinois releases crime data from 2001 onward online.
+
+Chicago is the third most populous city in the United States, with a population of over 2.7 million people. The city of Chicago is shown in the map below, with the state of Illinois highlighted in red. 
+
+There are two main types of crimes: violent crimes, and property crimes. In this problem, we'll focus on one specific type of property crime, called "motor vehicle theft" (sometimes referred to as grand theft auto). This is the act of stealing, or attempting to steal, a car. In this problem, we'll use some basic data analysis in R to understand the motor vehicle thefts in Chicago. 
+
+* P1 Loading the data
+```{r}
+rm(list=ls())
+mvt<-read.csv("mvtWeek1.csv")
+str(mvt)
+summary(mvt)
+attach(mvt)
+max(ID)
+min(Beat)
+table(Arrest)
+table(LocationDescription)
+```
+* Problem 2 - Understanding Dates in R
+```{r}
+head(mvt,1)
+#This converts the variable "Date" into a Date object in R. 
+DateConvert = as.Date(strptime(Date,"%m/%d/%y %H:%M"))
+summary(DateConvert)
+mvt$Month = months(DateConvert)
+mvt$Weekday = weekdays(DateConvert)
+Date = DateConvert
+names(mvt)
+table(mvt$Month)
+which.min(table(mvt$Month))
+table(mvt$Weekday)
+which.max(table(mvt$Weekday))
+table(mvt$Month,Arrest)
+which.max(table(mvt$Month[Arrest==TRUE]))
+```
+* Problem 3 - Visualizing Crime Trends
+```{r}
+attach(mvt)
+hist(Date,breaks=100)
+table(Year)
+boxplot(Date~Arrest,ylab="Date", main="Arrests vs. Time")
+#For what proportion of motor vehicle thefts in 2001 was an arrest made? 
+table(Arrest[Year==2001])
+2152/(2152+18517)
+#For what proportion of motor vehicle thefts in 2007 was an arrest made? 
+table(Arrest[Year==2007])
+1212/(1212+13068)
+#For what proportion of motor vehicle thefts in 2012 was an arrest made? 
+table(Arrest[Year==2012])
+550/(550+13542)
+```
+* Problem 4 - Popular Locations
+```{r}
+sort(table(mvt$LocationDescription))
+Top5<-subset(mvt,LocationDescription=="STREET"|LocationDescription=="PARKING LOT/GARAGE(NON.RESID.)"|LocationDescription=="ALLEY"|LocationDescription=="GAS STATION"|LocationDescription=="DRIVEWAY - RESIDENTIAL")
+dim(Top5)
+Top5$LocationDescription = factor(Top5$LocationDescription)
+#One of the locations has a much higher arrest rate than the other locations. Which is it? 
+ArrestRate <- table(Top5$LocationDescription,Top5$Arrest)
+prop.table(ArrestRate,1)
+#On which day of the week do the most motor vehicle thefts at gas stations happen?
+which.max(table(Top5$Weekday[Top5$LocationDescription=="GAS STATION"]))
+#On which day of the week do the fewest motor vehicle thefts in residential driveways happen?
+which.min(table(Top5$Weekday[Top5$LocationDescription=="DRIVEWAY - RESIDENTIAL"]))
+```
+
+## Stock dynamics 
+A stock market is where buyers and sellers trade shares of a company, and is one of the most popular ways for individuals and companies to invest money. The size of the world stock market  is now estimated to be in the trillions. The largest stock market in the world is the New York Stock Exchange (NYSE), located in New York City. About 2,800 companies are listed on the NSYE. In this problem, we'll look at the monthly stock prices of five of these companies: IBM, General Electric (GE), Procter and Gamble, Coca Cola, and Boeing. The data used in this problem comes from Infochimps.
+
+* Problem 1 - Summary Statistics 
+```{r}
+IBM <- read.csv("IBMStock.csv")
+GE <- read.csv("GEStock.csv")
+ProcterGamble <- read.csv("ProcterGambleStock.csv")
+CocaCola <- read.csv("CocaColaStock.csv")
+Boeing <- read.csv("BoeingStock.csv")
+str(IBM)
+View(IBM)
+IBM$Date = as.Date(IBM$Date,"%m/%d/%y")
+GE$Date = as.Date(GE$Date,"%m/%d/%y")
+ProcterGamble$Date = as.Date(ProcterGamble$Date,"%m/%d/%y")
+CocaCola$Date = as.Date(CocaCola$Date,"%m/%d/%y")
+Boeing$Date = as.Date(Boeing$Date,"%m/%d/%y")
+min(IBM$Date,GE$Date,ProcterGamble$Date,CocaCola$Date,Boeing$Date)
+max(IBM$Date,GE$Date,ProcterGamble$Date,CocaCola$Date,Boeing$Date)
+mean(IBM$StockPrice)
+min(GE$StockPrice)
+max(CocaCola$StockPrice)
+summary(Boeing$StockPrice)
+sd(ProcterGamble$StockPrice)
+```
+
+* Problem 2 - Visualizing Stock Dynamics
+```{r}
+plot(CocaCola$Date,CocaCola$StockPrice,type="l",xlab = "Date", ylab = "Stock Price", main = "Stock Price vs. Time",col="red")
+lines(ProcterGamble$Date,ProcterGamble$StockPrice,col="blue",type="l")
+legend('topright', c("Coca Cola","Procter Gample"), lty=1, col=c('red', 'blue'), bty='n', cex=.75)
+#In March of 2000, the technology bubble burst, and a stock market crash occurred. According to this plot, which company's stock dropped more? 
+abline(v=as.Date(c("2000-03-01")),lwd=2)
+#Around 1983, the stock for one of these companies (Coca-Cola or Procter and Gamble) was going up, while the other was going down. Which one was going up?
+#In the time period shown in the plot, which stock generally has lower values?
+abline(v=as.Date(c("1983-01-01")),lwd=2)
+```
+* Problem 3 - Visualizing Stock Dynamics 1995-2005
+```{r}
+plot(CocaCola$Date[301:432], CocaCola$StockPrice[301:432], type="l", col="red", ylim=c(0,210),xlab='Date',ylab='Stock Price', main = 'Stock Price 1995-2005')
+lines(ProcterGamble$Date[301:432],ProcterGamble$StockPrice[301:432],col="blue",type="l",ylim=c(0,210))
+lines(IBM$Date[301:432],IBM$StockPrice[301:432],col="green",type="l",ylim=c(0,210))
+lines(GE$Date[301:432],GE$StockPrice[301:432],col="purple",type="l",ylim=c(0,210))
+lines(Boeing$Date[301:432],Boeing$StockPrice[301:432],col="black",type="l",ylim=c(0,210))
+legend('topright', c("Coca Cola","Procter Gample","IBM","GE","Boeing"), lty=1, col=c('red', 'blue','green','purple','black'), bty='n', cex=.75)
+abline(v=as.Date(c("1997-09-01","1997-11-01")))
+```
+* Problem 4 - Monthly Trends
+```{r}
+#In which months has IBM historically had a higher stock price (on average)?
+tapply(IBM$StockPrice,months(IBM$Date),mean) > mean(IBM$StockPrice)
+# General Electric and Coca-Cola both have their highest average stock price in the same month. Which month is this?
+which.max(tapply(CocaCola$StockPrice,months(CocaCola$Date),mean))
+which.max(tapply(GE$StockPrice,months(GE$Date),mean))
+tapply(ProcterGamble$StockPrice,months(ProcterGamble$Date),mean) 
+tapply(Boeing$StockPrice,months(Boeing$Date),mean) 
+```
+
+## demographics and employment in the united states 
+* Problem 1 - Loading and Summarizing the Dataset
+```{r} 
+CPS <- read.csv("CPSData.csv")
+str(CPS)
+#Among the interviewees with a value reported for the Industry variable, what is the most common industry of employment? 
+which.max(table(CPS$Industry))
+#Which state has the fewest interviewees?
+which.min(table(CPS$State))
+#Which state has the largest number of interviewees?
+which.max(table(CPS$State))
+#What proportion of interviewees are citizens of the United States? 
+table(CPS$Citizenship)
+(7073+116639)/131302
+#For which races are there at least 250 interviewees in the CPS dataset of Hispanic ethnicity? 
+table(CPS$Race,CPS$Hispanic)
+```
+* Problem 2 - Evaluating Missing Values
+```{r}
+names(CPS)
+any(sapply(CPS$PeopleInHousehold,is.na))
+any(sapply(CPS$Region,is.na))
+any(sapply(CPS$State,is.na))
+any(sapply(CPS$MetroAreaCode,is.na))
+any(sapply(CPS$Age,is.na))
+any(sapply(CPS$Married,is.na))
+any(sapply(CPS$Sex,is.na))
+any(sapply(CPS$Education,is.na))
+any(sapply(CPS$Race,is.na))
+any(sapply(CPS$Hispanic,is.na))
+any(sapply(CPS$CountryOfBirthCode,is.na))
+any(sapply(CPS$Citizenship,is.na))
+any(sapply(CPS$EmploymentStatus,is.na))
+any(sapply(CPS$Industry,is.na))
+#We will try to determine if there is a pattern in the missing values of the Married variable
+m = table(is.na(CPS$Married))
+prop.table(m)
+prop.table(table(CPS$Region,is.na(CPS$Married)),1)
+prop.table(table(CPS$Sex,is.na(CPS$Married)),1)
+prop.table(table(CPS$Age,is.na(CPS$Married)),1)
+prop.table(table(CPS$Citizenship,is.na(CPS$Married)),1)
+#How many states had all interviewees living in a non-metropolitan area (aka they have a missing MetroAreaCode value)?
+table(CPS$State,is.na(CPS$MetroAreaCode))
+#Which region of the United States has the largest proportion of interviewees living in a non-metropolitan area?
+prop.table(table(CPS$Region,is.na(CPS$MetroAreaCode)),1)
+#Which state has a proportion of interviewees living in a non-metropolitan area closest to 30%?
+#Which state has the largest proportion of non-metropolitan interviewees,
+prop.table(table(CPS$State,is.na(CPS$MetroAreaCode)),1)
+```
+* Problem 3 - Integrating Metropolitan Area Data
+```{r}
+MetroAreaMap<-read.csv("MetroAreaCodes.csv")
+CountryMap<-read.csv("CountryCodes.csv")
+dim(MetroAreaMap)
+dim(CountryMap)
+CPS = merge(CPS, MetroAreaMap, by.x="MetroAreaCode", by.y="Code", all.x=TRUE)
+str(CPS)
+#How many interviewees have a missing value for the new MetroArea variable?
+table(is.na(CPS$MetroArea))
+#Which of the following metropolitan areas has the largest number of interviewees?
+sort(table(CPS$MetroArea))
+#Which metropolitan area has the highest proportion of interviewees of Hispanic ethnicity?
+sort(tapply(CPS$Hispanic,CPS$MetroArea,mean))
+#determine the number of metropolitan areas in the United States from which at least 20% of interviewees are Asian.
+table(tapply(CPS$Race=="Asian",CPS$MetroArea,mean)>0.2)
+#determine which metropolitan area has the smallest proportion of interviewees who have received no high school diploma.
+which.min(tapply(CPS$Education == "No high school diploma", CPS$MetroArea, mean, na.rm=TRUE))
+```
+* Problem 4.1 - Integrating Country of Birth Data
+```{r}
+CPS = merge(CPS, CountryMap, by.x="CountryOfBirthCode", by.y="Code", all.x=TRUE)
+#How many interviewees have a missing value for the new country of birth variable?
+table(is.na(CPS$Country))
+#Among all interviewees born outside of North America, which country was the most common place of birth?
+sort(table(CPS$Country))
+# What proportion of the interviewees from the "New York-Northern New Jersey-Long Island, NY-NJ-PA" metropolitan area have a country of birth that is not the United States? 
+sort(prop.table(table(CPS$Country[CPS$MetroArea=="New York-Northern New Jersey-Long Island, NY-NJ-PA"])))
+1-0.6913397483
+#Which metropolitan area has the largest number (note -- not proportion) of interviewees with a country of birth in India, Brazil, and Somalia? 
+which.max(prop.table(table(CPS$MetroArea[CPS$Country=="India"])))
+which.max(prop.table(table(CPS$MetroArea[CPS$Country=="Brazil"])))
+which.max(prop.table(table(CPS$MetroArea[CPS$Country=="Somalia"])))
+```
