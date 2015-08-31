@@ -1,0 +1,355 @@
+---
+title: "The Analytics Edge (Kaggle Competition)"
+author: "Na Sai"
+date: "April 16, 2015"
+output: html_document
+---
+
+## What makes online news articles popular?
+
+Newspapers and online news aggregators like Google News need to understand which news articles will be the most popular, so that they can prioritize the order in which stories appear. In this competition, you will predict the popularity of a set of New York Times blog articles from the time period September 2014-December 2014.
+
+## Variable Descriptions
+
+The dependent variable in this problem is the variable Popular, which labels if an article had 25 or more comments in its online comment section (equal to 1 if it did, and 0 if it did not). The dependent variable is provided in the training data set, but not the testing dataset. This is an important difference from what you are used to - you will not be able to see how well your model does on the test set until you make a submission on Kaggle.
+
+The independent variables consist of 8 pieces of article data available at the time of publication, and a unique identifier:
+
+    *NewsDesk = the New York Times desk that produced the story (Business, Culture, Foreign, etc.)
+    *SectionName = the section the article appeared in (Opinion, Arts, Technology, etc.)
+    *SubsectionName = the subsection the article appeared in (Education, Small Business, Room for Debate, etc.)
+    *Headline = the title of the article
+    *Snippet = a small portion of the article text
+    *Abstract = a summary of the blog article, written by the New York Times
+    *WordCount = the number of words in the article
+    *PubDate = the publication date, in the format "Year-Month-Day Hour:Minute:Second"
+    *UniqueID = a unique identifier for each article
+
+## Data 
+The data provided for this competition is split into two files:
+
+*    NYTimesBlogTrain.csv = the training data set. It consists of 6532 articles.
+*    NYTimesBlogTest.csv = the testing data set. It consists of 1870 articles.  
+
+## Reading the data 
+```{r}
+
+library(ROCR)
+library(randomForest)
+#library(WGCNA)
+library(SDMTools)
+
+NewsTrain = read.csv("NYTimesBlogTrain.csv", stringsAsFactors=FALSE)
+str(NewsTrain)
+names(NewsTrain)
+#NewsTest = read.csv("NYTimesBlogTest.csv", stringsAsFactors=FALSE)
+#str(NewsTest)
+
+# make a copy 
+News <- NewsTrain 
+str(News)
+
+# convert NewsDesk, SectioName, SubsectionName to factor
+News$NewsDesk<- as.factor(News$NewsDesk)
+News$SectionName<- as.factor(News$SectionName)
+News$SubsectionName<- as.factor(News$SubsectionName)
+str(News)
+#Converting the Date/time to R readable 
+News$PubDate = strptime(News$PubDate, "%Y-%m-%d %H:%M:%S")
+# extract the Weekday from the Data and store in new variable 
+News$Weekday = News$PubDate$wday
+
+# convert Weekday to factor 
+News$Weekday = as.factor(News$Weekday)
+
+#extract the hour from the data and store in new variable 
+News$hour = News$PubDate$hour
+News$hour = as.factor(News$hour)
+#convert dependent variable to factor 
+News$Popular<- as.factor(News$Popular)
+
+
+News$IsQ<- grepl("\\?", News$Headline)
+News$IsQ <- as.factor(News$IsQ)
+```
+
+# split the data 
+library(caTools)
+split <- sample.split(News$Popular,SplitRatio=0.8)
+NewsTrain <- subset(News,split == TRUE)
+NewsTest <- subset(News,split == FALSE)
+
+# separate Train and Test back to the original sets 
+#NewsTrain<-head(News,nrow(NewsTrain))
+#NewsTest<-tail(News,nrow(NewsTest))
+#rownames(NewsTest)<-NULL
+
+# add Popular (for Training) and UniqueID 
+#NewsTrain$Popular <- c(pop)
+#NewsTrain$UniqueID<- c(idTrain)
+#NewsTest$UniqueID <- c(idTest)
+
+
+
+## Exploring the data 
+```{r}
+summary(NewsTest)
+
+# Baseline model on training set 
+table(NewsTrain$Popular)
+table(NewsTest$Popular)
+
+# proportion of popular articles 
+table(NewsTrain$Popular)[2]/nrow(NewsTrain)
+table(NewsTest$Popular)[2]/nrow(NewsTest)
+
+```
+### Text analytics on Headline
+```{r}
+
+library(tm)
+
+HStopWords <- c(stopwords("english"), "make","makes", "million",  "springsummer" ,   "paris",  "time", "times", "get","gets",  "getting", "bank" ,"year", "say", "says", "art", "raise","raised","raising", "raises", "big", "billion", "small", "show", "shows", "showing", "take", "takes", "taking")
+AStopWords <- c(stopwords("english"), "take","takes","taking","work","works","working", "world",  "one",   "share", "sharing","shares", "bank", "banks", "look", "looks", "looking", "year", "years", "companies", "company", "plan", "plans", "planing", "now", "last", "citi","citys", "city",  "cities", "collect","collected","collects", "collection", "way", "like", "likes", "liked", "include","including","includes", "united", "unit", "group", "million", "business", "businesses", "help", "helps", "helping", "helped", "use", "uses", "useful", "using", "say", "says", "american", "americans", "houses", "housing", "said", "obama", "day", "days", "offers", "offer", "executes", "executive", "execute", "show", "shown", "shows", "make", "makes", "making", "two", "get", "gets", "getting") 
+
+
+# so far best
+MyStopWords <- c(stopwords("english"), "art", "appear", "archived","archive","articles","article","back","billion","business","book", "best","call","collect","collected","collects", "collection",  "come", "china", "daily","diary", "editor","first","former", "found", "fund", "highlight","highlighted","highlighting","herald","house", "include", "just","look","last", "may", "make", "management", "market", "million", "morning", "now", "open", "paris", "public", "pictures", "pictured", "raise", "springsummer","small", "show",  "take","time","tribune",  "united", "way", "will","work")
+
+
+#MyStopWords <- c(stopwords("english"), "art", "appear", "articles","article","back","billion","business","book", "best","call","collect","collected","collects", "collection",  "come", "china", "daily","diary", "editor","first","financial", "former", "found", "fund", "highlight","highlighted","highlighting","herald","house", "include","investor", "just","look","last", "may", "make", "management", "markset", "million", "morning", "now", "open", "paris", "public", "pictures","pictured", "raise", "springsummer","small", "show", "take","time","tribune",  "united", "way", "will","work") 
+
+
+#MyStopWords <- c(stopwords("english"),  "make" , "makes", "say", "says", "take" , "talk" , "time", "will", "can" , "company", "day","days", "get", "gets",  "like", "likes", "liked", "look" ,"looks", "new",   "one" , "said" ,  "say", "says",    "state",   "take", "takes",    "time",   "two" ,   "unit", "use" , "uses",   "will" , "work" , "works", "worked", "working", "world" ,  "year" , "springsummer", "small"  ,  "paris",  "senator"  ,    "pictures",     "tribune" ,    "herald"   ,  "art" ,       "diary" ,"archives", "dailies",  "daily",    "billion",   "first"  ,    "china"  ,  "business" ,      "raise",       "million",    "morning" ,      "collects",   "collect",  "collection", "highlight", "highlights", "highlighting","scene", "scenes", "deal", "deals")
+
+
+which(grepl("scene", News$Abstract))
+
+CorpusHeadline = Corpus(VectorSource(News$Headline))
+CorpusHeadline = tm_map(CorpusHeadline, tolower)
+CorpusHeadline = tm_map(CorpusHeadline, PlainTextDocument)
+CorpusHeadline = tm_map(CorpusHeadline, removePunctuation)
+CorpusHeadline = tm_map(CorpusHeadline, removeWords, HStopWords)
+#CorpusHeadline = tm_map(CorpusHeadline, removeWords, stopwords("english"))
+CorpusHeadline = tm_map(CorpusHeadline, stemDocument)
+CorpusHeadline = tm_map(CorpusHeadline, removeNumbers)
+dtmHeadline = DocumentTermMatrix(CorpusHeadline,control = list(weighting = function(x) weightTfIdf(x, normalize = FALSE)))
+sparseHeadline = removeSparseTerms(dtmHeadline, 0.99)
+HeadlineWords = as.data.frame(as.matrix(sparseHeadline))
+rownames(HeadlineWords)<-NULL
+colnames(HeadlineWords) = make.names(colnames(HeadlineWords))
+colnames(HeadlineWords) = paste0("H", colnames(HeadlineWords))
+
+
+# Abstract
+CorpusAbs = Corpus(VectorSource(News$Abstract))
+CorpusAbs = tm_map(CorpusAbs, tolower)
+CorpusAbs= tm_map(CorpusAbs, PlainTextDocument)
+CorpusAbs = tm_map(CorpusAbs, removePunctuation)
+CorpusAbs = tm_map(CorpusAbs, removeWords, AStopWords)
+#CorpusAbs = tm_map(CorpusAbs, removeWords, stopwords("english"))
+CorpusAbs = tm_map(CorpusAbs, stemDocument)
+CorpusAbs = tm_map(CorpusAbs, removeNumbers)
+dtmAbs = DocumentTermMatrix(CorpusAbs,control = list(weighting = function(x) weightTfIdf(x, normalize = FALSE)))
+sparseAbs = removeSparseTerms(dtmAbs, 0.97)
+AbsWords = as.data.frame(as.matrix(sparseAbs))
+colnames(AbsWords) = make.names(colnames(AbsWords))
+colnames(AbsWords) = paste0("A", colnames(AbsWords))
+
+
+# combine HeadlineWords and AbsWords
+AllWords <- cbind(HeadlineWords,AbsWords)
+rownames(AllWords)<-NULL
+AllWords$WordCount = log(News$WordCount+1)
+AllWords$Weekday = News$Weekday
+AllWords$hour = News$hour
+AllWords$NewsDesk <- News$NewsDesk
+AllWords$SectionName <- News$SectionName
+AllWords$SubsectionName <- News$SubsectionName
+AllWords$IsQ <- News$IsQ
+AllWords$Popular = News$Popular
+
+AllWordsTrain = head(AllWords, nrow(NewsTrain))
+AllWordsTest = tail(AllWords, nrow(NewsTest))
+rownames(AllWordsTest)<-NULL
+
+set.seed(5123512)
+AllRand = randomForest(Popular ~ ., data=AllWordsTrain,importantance=T)
+
+#train
+PredTrainAllRand = predict(AllRand, newdata=AllWordsTrain,type = "prob")
+#table(PredTrainAllRand[,2]>=0.5)
+tbl<-table(AllWordsTrain$Popular,PredTrainAllRand[,2]>=0.5)
+sum(diag(tbl))/sum(tbl)
+
+#test
+PredTestAllRand = predict(AllRand, newdata=AllWordsTest,type = "prob")
+tbl<-table(AllWordsTest$Popular,PredTestAllRand[,2]>=0.5)
+sum(diag(tbl))/sum(tbl)
+
+# train AUC
+RocTrain <- prediction(PredTrainAllRand[,2],AllWordsTrain$Popular)
+#perf<- performance(RocTrainLog, "tpr", "fpr")
+#plot(perf)
+aucTrain <- as.numeric(performance(RocTrain,"auc")@y.values)
+aucTrain
+
+# test AUC
+RocTest <- prediction(PredTestAllRand[,2],AllWordsTest$Popular)
+#perf<- performance(RocTrain, "tpr", "fpr")
+#plot(perf)
+aucTest <- as.numeric(performance(RocTest,"auc")@y.values)
+aucTest
+
+# importance gives the relative importance for each variable
+#varImpPlot(AllRand)
+varImp<-importance(AllRand)
+sort(varImp[,1])
+
+
+lowImpVars<-names(sort(varImp[,1]))[1:28]
+selVars<-names(sort(varImp[,1],decreasing=T))[1:38]
+                                                  
+
+# fewer variables 
+set.seed(5123512)
+AllRandSel = randomForest(x = AllWordsTrain[,selVars], y = AllWordsTrain$Popular, importantance=T)
+PredTrainAllRandSel = predict(AllRandSel, newdata=AllWordsTrain,type = "prob")
+
+PredTestAllRandSel = predict(AllRandSel, newdata=AllWordsTest,type = "prob")
+tbl<-table(AllWordsTest$Popular,PredTestAllRandSel[,2]>=0.5)
+sum(diag(tbl))/sum(tbl)
+
+RocTest <- prediction(PredTestAllRandSel[,2],AllWordsTest$Popular)
+aucTest <- as.numeric(performance(RocTest,"auc")@y.values)
+aucTest
+
+
+MySubmission = data.frame(UniqueID = NewsTest$UniqueID, Probability1 = PredTestAllRand[,2])
+write.csv(MySubmission, "SubmissionAllRandHead99Abs98MyNewStop.csv", row.names=FALSE)
+
+
+
+# tune Random Forest 
+tune = tuneRF(x=AllWordsTrain[c(1:70)],  y= AllWordsTrain$Popular, mtryStart=12)
+tune
+plot(tune)
+
+
+#rf.cv <- rfcv(x=AllWordsTrain[c(1:71)], y= AllWordsTrain$Popular, cv.fold=10)
+
+#with(rf.cv, plot(n.var, error.cv))
+
+library(caret)
+
+trControl=trainControl(method="boot",number=10)
+mtryGrid <- expand.grid(.mtry = seq(4,20,by=4))
+rfTune<- train(Popular ~ ., data = AllWordsTrain, method = "rf", trControl = trControl,tuneGrid = mtryGrid)
+
+# another cv 
+library(ROCR)
+
+install.packages("pROC")
+library(pROC)
+trControl <- trainControl(classProbs = TRUE, summaryFunction = twoClassSummary)
+mtryGrid <- expand.grid(.mtry = seq(4,20,by=4))
+tr = train(Popular~., data = AllWordsTrain, method="rf", nodesize=5, ntree=500, metric="ROC", trControl=trControl)
+
+
+# logistic (0.918 vs. 0.928 for rf)
+
+AllLog= glm(Popular ~ ., data=AllWordsTrain, family = binomial)
+summary(AllLog)
+
+#train
+PredTrainAllLog = predict(AllLog, newdata=AllWordsTrain,type="response")
+table(PredTrainAllLog>=0.5)
+#test
+PredTestAllLog = predict(AllLog, newdata=AllWordsTest,type = "response")
+table(PredTestAllLog>=0.5)
+
+MySubmission = data.frame(UniqueID = NewsTest$UniqueID, Probability1 = PredTestAllLog)
+write.csv(MySubmission, "SubmissionAllLogHead99Abs98MySWords.csv", row.names=FALSE)
+```
+
+### Ideas: 
+* change wordcount to log (wordcount+1) (tried)
+* bag of words of snippet or abstract (but distinguish words from headline by adding a prefix) (tried)
+
+colnames(HeadlineWords) = paste("H", colnames(HeadlineWords))
+#colnames(HeadlineWords) = make.names(colnames(HeadlineWords))
+row.names=NULL
+
+
+* choose  words with higher importance (?)
+* tune RF 
+* combining RF and glm 
+
+
+```{r}
+# unpopular ("N")
+CorpusHeadlineN = Corpus(VectorSource(News$Headline[News$Popular==0]))
+CorpusHeadlineN = tm_map(CorpusHeadlineN, tolower)
+CorpusHeadlineN = tm_map(CorpusHeadlineN, PlainTextDocument)
+CorpusHeadlineN = tm_map(CorpusHeadlineN, removePunctuation)
+#CorpusHeadlineN = tm_map(CorpusHeadlineN, removeWords, MyStopWords)
+CorpusHeadlineN = tm_map(CorpusHeadlineN, removeWords, stopwords("english"))
+CorpusHeadlineN = tm_map(CorpusHeadlineN, stemDocument)
+CorpusHeadlineN = tm_map(CorpusHeadlineN, removeNumbers)
+
+dtmHeadlineN = DocumentTermMatrix(CorpusHeadlineN,control = list(weighting = function(x) weightTfIdf(x, normalize = FALSE)))
+sparseHeadlineN = removeSparseTerms(dtmHeadlineN, 0.99)
+HeadlineWordsN = as.data.frame(as.matrix(sparseHeadlineN))
+
+
+# Popular ("Y")
+CorpusHeadlineY = Corpus(VectorSource(News$Headline[News$Popular==1]))
+CorpusHeadlineY = tm_map(CorpusHeadlineY, tolower)
+CorpusHeadlineY = tm_map(CorpusHeadlineY, PlainTextDocument)
+CorpusHeadlineY = tm_map(CorpusHeadlineY, removePunctuation)
+#CorpusHeadlineN = tm_map(CorpusHeadlineY, removeWords, MyStopWords)
+CorpusHeadlineY = tm_map(CorpusHeadlineY, removeWords, stopwords("english"))
+CorpusHeadlineY = tm_map(CorpusHeadlineY, stemDocument)
+CorpusHeadlineY = tm_map(CorpusHeadlineY, removeNumbers)
+# Now we are ready to convert our corpus to a DocumentTermMatrix, remove sparse terms, and turn it into a data frame. 
+# We selected one particular threshold to remove sparse terms, but remember that you can try different numbers!
+
+#dtmHeadline = DocumentTermMatrix(CorpusHeadline)
+dtmHeadlineY = DocumentTermMatrix(CorpusHeadlineY,control = list(weighting = function(x) weightTfIdf(x, normalize = FALSE)))
+sparseHeadlineY = removeSparseTerms(dtmHeadlineY, 0.99)
+HeadlineWordsY= as.data.frame(as.matrix(sparseHeadlineY))
+intersect(names(HeadlineWordsY),names(HeadlineWordsN))
+
+
+# Abstract unpopular 
+CorpusAbsN = Corpus(VectorSource(News$Abstract[News$Popular==0]))
+CorpusAbsN = tm_map(CorpusAbsN, tolower)
+CorpusAbsN= tm_map(CorpusAbsN, PlainTextDocument)
+CorpusAbsN = tm_map(CorpusAbsN, removePunctuation)
+#CorpusAbsN = tm_map(CorpusAbsN, removeWords, MyStopWords)
+CorpusAbsN = tm_map(CorpusAbsN, removeWords, stopwords("english"))
+CorpusAbsN = tm_map(CorpusAbsN, stemDocument)
+#CorpusAbs = tm_map(CorpusAbs, removeWords, MyStopWords)
+CorpusAbsN = tm_map(CorpusAbsN, removeNumbers)
+dtmAbsN = DocumentTermMatrix(CorpusAbsN,control = list(weighting = function(x) weightTfIdf(x, normalize = FALSE)))
+sparseAbsN = removeSparseTerms(dtmAbsN, 0.98)
+AbsWordsN = as.data.frame(as.matrix(sparseAbsN))
+colnames(AbsWordsN) = make.names(colnames(AbsWordsN))
+
+#popular 
+CorpusAbsY = Corpus(VectorSource(News$Abstract[News$Popular==1]))
+CorpusAbsY = tm_map(CorpusAbsY, tolower)
+CorpusAbsY= tm_map(CorpusAbsY, PlainTextDocument)
+CorpusAbsY = tm_map(CorpusAbsY, removePunctuation)
+#CorpusAbsN = tm_map(CorpusAbsN, removeWords, MyStopWords)
+CorpusAbsY = tm_map(CorpusAbsY, removeWords, stopwords("english"))
+CorpusAbsY = tm_map(CorpusAbsY, stemDocument)
+#CorpusAbs = tm_map(CorpusAbs, removeWords, MyStopWords)
+CorpusAbsY = tm_map(CorpusAbsY, removeNumbers)
+dtmAbsY = DocumentTermMatrix(CorpusAbsY,control = list(weighting = function(x) weightTfIdf(x, normalize = FALSE)))
+sparseAbsY = removeSparseTerms(dtmAbsY, 0.98)
+AbsWordsY = as.data.frame(as.matrix(sparseAbsY))
+colnames(AbsWordsY) = make.names(colnames(AbsWordsY))
+
+intersect(names(AbsWordsY),names(AbsWordsN))
+```

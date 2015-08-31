@@ -1,0 +1,22 @@
+---
+title: "The Analytics Edge (Unit 8)"
+author: "Na Sai"
+date: "May 7, 2015"
+output: html_document
+---
+
+# Lecture 
+## 8.1 Airline Revenue Management : An Introduction to Linear Optimization 
+Suppose that, as in the previous video, regular seats cost $617 and discount seats cost $238. We are selling 166 seats. The demand for regular seats is 150 and the demand for discount seats is 150. 
+```{r}
+CostReg <- 617 
+CostDis <- 238 
+Nticket <- 166 
+DemandReg <- 150 
+DemandDis <- 150 
+#How many discount seats should we sell?
+NDis <- Nticket - DemandReg
+#What would our total revenue be, for both regular and discount seats, assuming that we have a full plane?
+TotalRev <- DemandReg * CostReg + NDis * CostDis 
+TotalRev
+```

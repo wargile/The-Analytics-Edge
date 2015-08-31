@@ -1,0 +1,68 @@
+---
+title: "tmp"
+author: "Na Sai"
+date: "April 28, 2015"
+output: html_document
+---
+
+
+### Models using Headline Words, Word Count, and Weekday (score 0.74626)
+```{r}
+# Logistic model 
+
+HeadlineWordsLog = glm(Popular ~ ., data=HeadlineWordsTrain, family=binomial)
+
+# Calculate the accuracy on training set 
+PredTrainHeadlineLog <- predict(HeadlineWordsLog,newdata = HeadlineWordsTrain,type = "response")
+table(PredTrainHeadlineLog>=0.5)
+tbl <- table(HeadlineWordsTrain$Popular,PredTrainHeadlineLog>=0.5)
+accTrain <-sum(diag(tbl))/sum(tbl) 
+accTrain
+# auc 
+library(ROCR)
+RocTrainHeadlineLog <- prediction(PredTrainHeadlineLog,HeadlineWordsTrain$Popular)
+aucTrain <- as.numeric(performance(RocTrainHeadlineLog,"auc")@y.values)
+aucTrain
+
+PredTestHeadlineLog = predict(HeadlineWordsLog, newdata=HeadlineWordsTest, type="response")
+MySubmission = data.frame(UniqueID = NewsTest$UniqueID, Probability1 = PredTestHeadlineLog)
+write.csv(MySubmission, "SubmissionHeadlineLog.csv", row.names=FALSE)
+
+
+# Cart model using Headline Words, Word Count, and Weekday (score 0.708)
+library(rpart)
+library(rpart.plot)
+#install.packages("rattle") 
+library(rattle)
+library(RColorBrewer)
+
+
+#HeadlineWordsCart = rpart(Popular ~., data=HeadlineWordsTrain, method = "class", minsplit = 2, minbucket = 1,cp=-2)
+HeadlineWordsCart = rpart(Popular ~ ., data=HeadlineWordsTrain, method = "class", minsplit = 2, minbucket = 1, cp=0.001)
+PredTrainCart <- predict(HeadlineWordsCart,newdata = HeadlineWordsTrain)
+PredTestCart <- predict(HeadlineWordsCart,newdata = HeadlineWordsTest,type = "prob")
+
+# Now we can prepare our submission file for Kaggle:
+MySubmission = data.frame(UniqueID = NewsTest$UniqueID, Probability1 = PredTestCart[,2])
+write.csv(MySubmission, "SubmissionHeadlineCart.csv", row.names=FALSE)
+
+HeadlineWordsCart
+fancyRpartPlot(HeadlineWordsCart)
+prp(HeadlineWordsCart)
+
+# Random Forest 
+library(randomForest)
+HeadlineWordsRand = randomForest(Popular ~ WordCount, data=HeadlineWordsTrain)
+PredTrainRand <- predict(HeadlineWordsRand,newdata = HeadlineWordsTrain, type="prob")
+PredTestRand <- predict(HeadlineWordsRand,newdata = HeadlineWordsTest, type = "prob")
+
+# Now we can prepare our submission file for Kaggle:
+MySubmission = data.frame(UniqueID = NewsTest$UniqueID, Probability1 = PredTestRand)
+write.csv(MySubmission, "SubmissionHeadlineRand.csv", row.names=FALSE)
+
+tbl<-table(PredTrainRand,HeadlineWordsTrain$Popular)
+accTrainRand <-sum(diag(tbl))/sum(tbl) 
+accTrainRand
+```
+
+

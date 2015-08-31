@@ -1,0 +1,94 @@
+---
+title: "The Analytics Edge (Unit 6)"
+author: "Na Sai"
+date: "April 20, 2015"
+output: html_document
+---
+
+# Quick Question 
+## Computing Distances
+The movie "The Godfather" is in the genres action, crime, and drama, and is defined by the vector: (0,1,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0)
+
+The movie "Titanic" is in the genres action, drama, and romance, and is defined by the vector: (0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0)
+
+What is the distance between "The Godfather" and "Titanic", using euclidean distance?
+
+```{r}
+x1 <- c(0,1,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0)
+x2 <- c(0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0)
+EucDis <- sqrt(sum((x2-x1)^2))
+EucDis
+```
+## Movies Data 
+In this video, we'll be downloading our dataset from the MovieLens website. Please open the following link in a new window or tab of your browser to access the data: http://files.grouplens.org/datasets/movielens/ml-100k/u.item
+
+```{r}
+# After following the steps in the video, load the data into R
+movies = read.table("movieLens.txt", header=FALSE, sep="|",quote="\"")
+
+str(movies)
+
+# Add column names
+colnames(movies) = c("ID", "Title", "ReleaseDate", "VideoReleaseDate", "IMDB", "Unknown", "Action", "Adventure", "Animation", "Childrens", "Comedy", "Crime", "Documentary", "Drama", "Fantasy", "FilmNoir", "Horror", "Musical", "Mystery", "Romance", "SciFi", "Thriller", "War", "Western")
+
+str(movies)
+
+# Remove unnecessary variables
+movies$ID = NULL
+movies$ReleaseDate = NULL
+movies$VideoReleaseDate = NULL
+movies$IMDB = NULL
+
+# Remove duplicates
+movies = unique(movies)
+
+# Take a look at our data again:
+str(movies)
+
+
+# How many movies are classified as comedies?
+table(movies$Comedy)
+table(movies$Western)
+table(movies$Drama==1&movies$Romance==1)
+
+
+# Compute distances
+distances = dist(movies[2:20], method = "euclidean")
+
+# Hierarchical clustering
+clusterMovies = hclust(distances, method = "ward.D")
+#clusterMovies = hclust(distances, method = "ward") 
+
+# Plot the dendrogram
+plot(clusterMovies)
+
+# Assign points to clusters
+clusterGroups = cutree(clusterMovies, k = 2)
+tapply(movies$Action, clusterGroups, mean)
+tapply(movies$Comedy, clusterGroups, mean)
+tapply(movies$Adventure, clusterGroups, mean)
+tapply(movies$Romance, clusterGroups, mean)
+tapply(movies$Drama, clusterGroups, mean)
+```
+
+# Assignment 6 
+## 6.1 
+document clustering with daily kos
+
+Document clustering, or text clustering, is a very popular application of clustering algorithms. A web search engine, like Google, often returns thousands of results for a simple query. For example, if you type the search term "jaguar" into Google, around 200 million results are returned. This makes it very difficult to browse or find relevant information, especially if the search term has multiple meanings. If we search for "jaguar", we might be looking for information about the animal, the car, or the Jacksonville Jaguars football team. 
+
+Clustering methods can be used to automatically group search results into categories, making it easier to find relavent results. This method is used in the search engines PolyMeta and Helioid, as well as on FirstGov.gov, the official Web portal for the U.S. government. The two most common algorithms used for document clustering are Hierarchical and k-means. 
+
+In this problem, we'll be clustering articles published on Daily Kos, an American political blog that publishes news and opinion articles written from a progressive point of view. Daily Kos was founded by Markos Moulitsas in 2002, and as of September 2014, the site had an average weekday traffic of hundreds of thousands of visits. 
+
+The file dailykos.csv contains data on 3,430 news articles or blogs that have been posted on Daily Kos. These articles were posted in 2004, leading up to the United States Presidential Election. The leading candidates were incumbent President George W. Bush (republican) and John Kerry (democratic). Foreign policy was a dominant topic of the election, specifically, the 2003 invasion of Iraq. 
+```{r}
+dailykos<-read.csv("dailykos.csv",header=FALSE)
+str(dailykos)
+dailyMatrix<-as.matrix(dailykos)
+str(dailyMatrix)
+dailyVec<-as.vector(dailyMatrix)
+str(dailyVec)
+distDaily<- dist(dailyVec,method = "euclidean") 
+```
+

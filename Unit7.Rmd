@@ -1,0 +1,270 @@
+---
+title: "The Analytics Edge (Unit 7)"
+author: "Na Sai"
+date: "April 26, 2015"
+output: html_document
+---
+
+# Finger exercise
+## Visualizing the World: 
+```{r}
+WHO <- read.csv("WHO.csv")
+str(WHO)
+plot(WHO$GNI, WHO$FertilityRate)
+library(ggplot2)
+scatterplot = ggplot(WHO, aes(x = GNI, y = FertilityRate))
+scatterplot + geom_point()
+scatterplot + geom_point(color = "blue", size = 3, shape=17)
+
+fertilityGNIplot = scatterplot + geom_point(color = "darkred", size = 3, shape=8) + ggtitle("Fertility rate vs. GNI")
+# save in file
+pdf("Myplot.pdf")
+print(fertilityGNIplot)
+
+# back to terminal
+dev.off()
+scatterplot + geom_point(color = "blue", size = 3, shape=15)
+ggplot(WHO,aes(x=GNI,y=FertilityRate,color=Region))+geom_point()
+ggplot(WHO,aes(x=GNI,y=FertilityRate,color=LifeExpectancy))+geom_point()
+ggplot(WHO,aes(x=FertilityRate,y=Under15))+geom_point()
+ggplot(WHO,aes(x=log(FertilityRate),y=Under15))+geom_point() + stat_smooth(method="lm",se=FALSE,color="orange")
+model = lm(Under15~log(FertilityRate),data = WHO)
+summary(model)
+
+ggplot(WHO, aes(x = FertilityRate, y = Under15, color=Region)) + geom_point()+scale_color_brewer(palette="Dark2") 
+```
+
+## The analytical Policeman
+```{r}
+mvt = read.csv("mvt.csv",stringsAsFactor = FALSE)
+str(mvt)
+mvt$Date = strptime(mvt$Date,format="%m/%d/%y %H:%M")
+mvt$Weekday = weekdays(mvt$Date) 
+mvt$Hour = mvt$Date$hour
+table(mvt$Weekday)
+WeekdayCounts = as.data.frame(table(mvt$Weekday))
+str(WeekdayCounts)
+library(ggplot2)
+# lineplot 
+WeekdayCounts$Var1 = factor(WeekdayCounts$Var1,ordered = TRUE,levels=c("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"))
+ggplot(WeekdayCounts,aes(x=Var1,y=Freq))+geom_line(aes(group=1),linetype = 2)+xlab("Day of the Week")+ylab("Total Motorvehicle Thefts")
+
+ggplot(WeekdayCounts,aes(x=Var1,y=Freq))+geom_line(aes(group=1),alpha = 0.3)+xlab("Day of the Week")+ylab("Total Motorvehicle Thefts")
+
+# heat map 
+table(mvt$Weekday,mvt$Hour)
+DayHourCounts = as.data.frame(table(mvt$Weekday,mvt$Hour))
+str(DayHourCounts)
+DayHourCounts$Hour = as.numeric(as.character(DayHourCounts$Var2))
+str(DayHourCounts)
+ggplot(DayHourCounts,aes(x=Hour,y=Freq))+geom_line(aes(group=Var1,color=Var1),size=2)
+
+DayHourCounts$Var1 = factor(DayHourCounts$Var1,ordered=TRUE, levels=c("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"))
+ggplot(DayHourCounts,aes(x = Hour,y=Var1))+geom_tile(aes(fill=Freq))+scale_fill_gradient(name="Total MV Theft",low="white",high="red") + theme(axis.title.y = element_blank())
+
+#install.packages("maps")
+#install.packages("ggmap")
+library(maps)
+library(ggmap)
+
+chicago = get_map(location="chicago",zoom=11)
+ggmap(chicago) + geom_point(data = mvt[1:100,],aes(x=Longitude,y=Latitude))
+
+LatLonCounts = as.data.frame(table(round(mvt$Longitude,2),round(mvt$Latitude,2)))
+str(LatLonCounts)
+#convert factor to numeric 
+LatLonCounts$Long = as.numeric(as.character(LatLonCounts$Var1))
+LatLonCounts$Lat = as.numeric(as.character(LatLonCounts$Var2))
+ggmap(chicago) + geom_point(data = LatLonCounts, aes(x = Long, y = Lat, color = Freq, size=Freq)) + scale_colour_gradient(low="yellow", high="red")
+ggmap(chicago) + geom_tile(data = LatLonCounts,aes(x=Long,y=Lat,alpha = Freq),fill = "red")
+
+LatLonCounts2 = subset(LatLonCounts,Freq>0)
+ggmap(chicago) + geom_tile(data = LatLonCounts2,aes(x=Long,y=Lat,alpha = Freq),fill = "red")
+ggmap(chicago) + geom_point(data = LatLonCounts2, aes(x = Long, y = Lat, color = Freq, size=Freq)) + scale_colour_gradient(low="yellow", high="red")
+```
+
+##  A Heatmap on the United States
+```{r}
+murders = read.csv("murders.csv")
+str(murders)
+statesMap=map_data("state")
+str(statesMap)
+ggplot(statesMap,aes(x=long, y = lat, group=group)) +geom_polygon(fill = "white",color = "black")
+murders$region=tolower(murders$State)
+murderMap = merge(statesMap,murders,by ="region")
+str(murderMap)
+ggplot(murderMap,aes(x=long,y=lat,group=group,fill=Murders))+geom_polygon(color="black")+scale_fill_gradient(low="black",high="red",guide="legend")
+ggplot(murderMap,aes(x=long,y=lat,group=group,fill=Population))+geom_polygon(color="black")+scale_fill_gradient(low="black",high="red",guide="legend")
+murderMap$MurderRate = murderMap$Murders/murderMap$Population*100000
+ggplot(murderMap,aes(x=long,y=lat,group=group,fill=MurderRate))+geom_polygon(color="black")+scale_fill_gradient(low="black",high="red",guide="legend",limits=c(0,10))
+
+#fill each state with the variable GunOwnership
+murderMap$GunOwnershipRate = murderMap$GunOwnership/murderMap$Population*100000
+ggplot(murderMap,aes(x=long,y=lat,group=group,fill=GunOwnershipRate))+geom_polygon(color="black")+scale_fill_gradient(low="black",high="red",guide="legend")
+```
+
+# Assignment 7 
+## 7.1 Election Forecasting Revisited
+In the recitation from Unit 3, we used logistic regression on polling data in order to construct US presidential election predictions. We separated our data into a training set, containing data from 2004 and 2008 polls, and a test set, containing the data from 2012 polls. We then proceeded to develop a logistic regression model to forecast the 2012 US presidential election.
+
+In this homework problem, we'll revisit our logistic regression model from Unit 3, and learn how to plot the output on a map of the United States. Unlike what we did in the Crime lecture, this time we'll be plotting predictions rather than data!
+### Drawing a map of the United States
+```{r}
+library(ggplot2)
+library(maps)
+library(ggmap)
+statesMap = map_data("state")
+str(statesMap)
+#How many different groups are there? 
+table(statesMap$group)
+ggplot(statesMap, aes(x = long, y = lat, group = group)) + geom_polygon(fill = "white", color = "black") 
+```
+### Coloring the States by Predictions 
+```{r}
+polling<-read.csv("PollingImputed.csv")
+str(polling)
+Train <- subset(polling,Year == 2004|Year ==2008 )
+Test <- subset(polling,Year ==2012)
+nrow(Train)+nrow(Test)== nrow(polling)
+mod2 = glm(Republican~SurveyUSA + DiffCount, data = Train, family = "binomial")
+TestPrediction = predict(mod2,newdata = Test, type = "response")
+TestPredictionBinary = as.numeric(TestPrediction>0.5)
+predictionDataFrame= data.frame(TestPrediction,TestPredictionBinary,Test$State)
+str(predictionDataFrame)
+#For how many states is our binary prediction 1 (for 2012), corresponding to Republican?
+table(predictionDataFrame$TestPredictionBinary)
+#What is the average predicted probability of our model (on the Test set, for 2012)?
+summary(predictionDataFrame$TestPrediction)
+
+predictionDataFrame$region = tolower(predictionDataFrame$Test.State)
+predictionMap <- merge(statesMap,predictionDataFrame,by="region")
+#make sure the observations are in order so that the map is drawn properly,
+predictionMap <- predictionMap[order(predictionMap$order),]
+str(predictionMap)
+str(statesMap) # only make prediction for 45 states, so there are less observation in the predictionMap than statesMap
+
+# color the map with predictions
+ggplot(predictionMap,aes(x = long, y = lat, group = group, fill = TestPredictionBinary )) + geom_polygon(color="black")
+
+# replot with discrete outcome and use red (republican) and blue (democrates)
+ggplot(predictionMap,aes(x = long, y = lat, group = group, fill = TestPredictionBinary )) + geom_polygon(color="black") + scale_fill_gradient(low = "blue", high = "red", guide = "legend", breaks= c(0,1), labels = c("Democrat", "Republican"), name = "Prediction 2012")
+
+# plot the probabilities instead of the binary predictions. 
+ggplot(predictionMap,aes(x = long, y = lat, group = group, fill = TestPrediction )) + geom_polygon(color="black") + scale_fill_gradient(low = "blue", high = "red", guide = "legend", breaks= c(0,1), labels = c("Democrat", "Republican"), name = "Prediction 2012")
+
+# What was our predicted probability for the state of Florida (that was incorrectly predicted to be Republican)
+predictionDataFrame$TestPrediction[predictionDataFrame$region =="florida"]
+
+
+ggplot(predictionMap,aes(x = long, y = lat, group = group, fill = TestPredictionBinary )) + geom_polygon(color="black",linetype=3) + scale_fill_gradient(low = "blue", high = "red", guide = "legend", breaks= c(0,1), labels = c("Democrat", "Republican"), name = "Prediction 2012")
+ggplot(predictionMap,aes(x = long, y = lat, group = group, fill = TestPredictionBinary )) + geom_polygon(color="black",size=3) + scale_fill_gradient(low = "blue", high = "red", guide = "legend", breaks= c(0,1), labels = c("Democrat", "Republican"), name = "Prediction 2012")
+ggplot(predictionMap,aes(x = long, y = lat, group = group, fill = TestPredictionBinary )) + geom_polygon(color="black",alpha=0.3) + scale_fill_gradient(low = "blue", high = "red", guide = "legend", breaks= c(0,1), labels = c("Democrat", "Republican"), name = "Prediction 2012")
+```
+
+## 7.2 Visualizing Network Data
+The cliche goes that the world is an increasingly interconnected place, and the connections between different entities are often best represented with a graph. Graphs are comprised of vertices (also often called "nodes") and edges connecting those nodes. In this assignment, we will learn how to visualize networks using the igraph package in R.
+
+For this assignment, we will visualize social networking data using anonymized data from Facebook; this data was originally curated in a recent paper about computing social circles in social networks. In our visualizations, the vertices in our network will represent Facebook users and the edges will represent these users being Facebook friends with each other.
+
+```{r}
+edges<- read.csv("edges.csv")
+users<-read.csv("users.csv")
+str(users)
+str(edges)
+#How many Facebook users are there in our dataset?
+nrow(users)
+#what is the average number of friends per user?
+friends = c(7,13,1,0,5,8,1,6,5,3,2,2,5,10,8,3,3,10,13,3,8,1,6,4,9,2,1,3,0,9,0,3,1,5,11,0,3,8,6,7,7,10,0,17,0,3,8,6,1,1,18,10,1,2,1,0,1,3,8)
+sum(friends)/nrow(users)
+avgFriends = nrow(edges)*2 / nrow(users)
+#Out of all the students who listed a school, what was the most common locale?
+summary(users)
+#Is it possible that either school A or B is an all-girls or all-boys school?
+
+#install.packages("igraph")
+library(igraph)
+g = graph.data.frame(edges,FALSE,users)
+str(g)
+#get.data.frame(g, what=c("both"))
+plot(g,vertex.size=5,vertex.label = NA)
+
+# change size of the vertices 
+V(g)$size=degree(g)/2+2
+plot(g,vertex.label=NA)
+V(g)$size
+summary(V(g)$size)
+
+#When we created our graph g, we provided it with the data frame users, which had variables gender, school, and locale. These are now stored as attributes V(g)$gender, V(g)$school, and V(g)$locale.
+# Now color the vertices based on the gender of the user, 
+V(g)$color = "black"
+V(g)$color[V(g)$gender == "A"] = "red"
+V(g)$color[V(g)$gender=="B"] = "grey"
+plot(g,vertex.label = NA)
+
+#Now, color the vertices based on the school that each user in our network attended.
+V(g)$color = "black"
+V(g)$color[V(g)$school == "A"] = "blue"
+V(g)$color[V(g)$school == "AB"] = "red"
+plot(g,vertex.label = NA)
+
+#Now, color the vertices based on the locale of the user.
+V(g)$color = "black"
+V(g)$color[V(g)$locale == "A"] = "blue"
+V(g)$color[V(g)$locale == "B"] = "red"
+plot(g,vertex.label = NA)
+
+```
+
+## 7.3 Visualizing Text Data Using Word CLouds
+Earlier in the course, we used text analytics as a predictive tool, using word frequencies as independent variables in our models. However, sometimes our goal is to understand commonly occurring topics in text data instead of to predict the value of some dependent variable. In such cases, word clouds can be a visually appealing way to display the most frequent words in a body of text.A word cloud arranges the most common words in some text, using size to indicate the frequency of a word. While we could generate word clouds using free generators available on the Internet, we will have more flexibility and control over the process if we do so in R. We will visualize the text of tweets about Apple, a dataset we used earlier in the course. 
+```{r}
+tweets<-read.csv("tweets.csv",stringsAsFactor = FALSE)
+library(tm)
+corpus <- Corpus(VectorSource(tweets))
+corpus<-tm_map(corpus,tolower)
+corpus = tm_map(corpus, PlainTextDocument)
+corpus <- tm_map(corpus,removePunctuation)
+corpus <- tm_map(corpus,removeWords,stopwords("english"))
+dtm <- DocumentTermMatrix(corpus)
+dtm
+allTweets <- as.data.frame(as.matrix(dtm))
+str(allTweets)
+ncol(unique(allTweets))
+
+#install.packages("wordcloud")
+library(wordcloud)
+#Which function can we apply to allTweets to get a vector of the words in our dataset, which we'll pass as the first argument to wordcloud()?
+words<- colnames(allTweets)
+#Which function should we apply to allTweets to obtain the frequency of each word across all tweets?
+freq<- colSums(allTweets)
+wordcloud(words,freq,scale=c(2, 0.25))
+
+# remove "apple" (the most frequent word) from the corpus
+wordToRemove = c("apple")
+corpusNoApple<-tm_map(corpus,removeWords,wordToRemove)
+dtmNoApple <- DocumentTermMatrix(corpusNoApple)
+dtmNoApple
+allTweetsNoApple <- as.data.frame(as.matrix(dtmNoApple))
+wordsNoApple<- colnames(allTweetsNoApple)
+# check if 'apple' is still in the list 
+'apple' %in% wordsNoApple
+
+# new data frame without 'apple'
+freqNoApple<- colSums(allTweetsNoApple)
+wordcloud(wordsNoApple,freqNoApple,scale=c(2, 0.25), random.order=FALSE,min.freq=3,max.words=Inf)
+
+# changing min.freq, max.words 
+wordcloud(wordsNoApple,freqNoApple,scale=c(2, 0.25), random.order=FALSE,min.freq=10,max.words=100)
+
+# chaning rot.per
+wordcloud(wordsNoApple,freqNoApple,scale=c(2, 0.25), random.order=FALSE,rot.per=0.9)
+
+# setting colors using brewer.pal 
+wordcloud(wordsNoApple,freqNoApple,scale=c(2, 0.25), random.order=FALSE, rot.per=0.1,random.color=FALSE,colors=brewer.pal(9, "Blues")[c(5, 6, 7, 8, 9)])
+# same as above 
+#wordcloud(wordsNoApple,freqNoApple,scale=c(2, 0.25), random.order=FALSE, rot.per=0.1,random.color=FALSE,colors=brewer.pal(9, "Blues")[c(-1, -2, -3, -4)])
+
+
+
+
+```

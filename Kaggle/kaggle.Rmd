@@ -1,0 +1,458 @@
+---
+title: "The Analytics Edge (Kaggle Competition)"
+author: "Na Sai"
+date: "April 16, 2015"
+output: html_document
+---
+
+## What makes online news articles popular?
+
+Newspapers and online news aggregators like Google News need to understand which news articles will be the most popular, so that they can prioritize the order in which stories appear. In this competition, you will predict the popularity of a set of New York Times blog articles from the time period September 2014-December 2014.
+
+## Variable Descriptions
+
+The dependent variable in this problem is the variable Popular, which labels if an article had 25 or more comments in its online comment section (equal to 1 if it did, and 0 if it did not). The dependent variable is provided in the training data set, but not the testing dataset. This is an important difference from what you are used to - you will not be able to see how well your model does on the test set until you make a submission on Kaggle.
+
+The independent variables consist of 8 pieces of article data available at the time of publication, and a unique identifier:
+
+    *NewsDesk = the New York Times desk that produced the story (Business, Culture, Foreign, etc.)
+    *SectionName = the section the article appeared in (Opinion, Arts, Technology, etc.)
+    *SubsectionName = the subsection the article appeared in (Education, Small Business, Room for Debate, etc.)
+    *Headline = the title of the article
+    *Snippet = a small portion of the article text
+    *Abstract = a summary of the blog article, written by the New York Times
+    *WordCount = the number of words in the article
+    *PubDate = the publication date, in the format "Year-Month-Day Hour:Minute:Second"
+    *UniqueID = a unique identifier for each article
+
+## Data 
+The data provided for this competition is split into two files:
+
+*    NYTimesBlogTrain.csv = the training data set. It consists of 6532 articles.
+*    NYTimesBlogTest.csv = the testing data set. It consists of 1870 articles.  
+
+## Reading the data 
+```{r}
+NewsTrain = read.csv("NYTimesBlogTrain.csv", stringsAsFactors=FALSE)
+str(NewsTrain)
+names(NewsTrain)
+NewsTest = read.csv("NYTimesBlogTest.csv", stringsAsFactors=FALSE)
+str(NewsTest)
+```
+
+## Formating the data, convert variables to factors 
+```{r}
+
+# store popular and ID in separate variables to use later 
+pop <- NewsTrain$Popular
+idTrain <- NewsTrain$UniqueID
+idTest <- NewsTest$UniqueID
+
+# first remove Popular and ID from the Train and Test set 
+NewsTrain$Popular = NULL
+NewsTrain$UniqueID = NULL
+NewsTest$UniqueID = NULL
+
+
+# rbind the train and test set 
+News <- rbind(NewsTrain,NewsTest) 
+#rbind() checks the rownames on the object it creates and adjusts duplicate rownames to make them unique.
+rownames(News) <- NULL
+nrow(News) == nrow(NewsTrain) + nrow(NewsTest)
+
+# convert NewsDesk, SectioName, SubsectionName to factor
+News$NewsDesk<- as.factor(News$NewsDesk)
+News$SectionName<- as.factor(News$SectionName)
+News$SubsectionName<- as.factor(News$SubsectionName)
+str(News)
+#Converting the Date/time to R readable 
+News$PubDate = strptime(News$PubDate, "%Y-%m-%d %H:%M:%S")
+# extract the Weekday from the Data and store in new variable 
+News$Weekday = News$PubDate$wday
+
+# convert Weekday to factor 
+News$Weekday = as.factor(News$Weekday)
+
+#extract the hour from the data and store in new variable 
+News$hour = News$PubDate$hour
+News$hour = as.factor(News$hour)
+
+News$IsQ<- grepl("\\?", News$Headline)
+News$IsQ <- as.factor(News$IsQ)
+
+News$WordCount <- log(News$WordCount+1)
+
+# separate Train and Test back to the original sets 
+NewsTrain<-head(News,nrow(NewsTrain))
+NewsTest<-tail(News,nrow(NewsTest))
+rownames(NewsTest)<-NULL
+
+# add Popular (for Training) and UniqueID 
+NewsTrain$Popular <- c(pop)
+NewsTrain$UniqueID<- c(idTrain)
+NewsTest$UniqueID <- c(idTest)
+NewsTrain$Popular<- as.factor(NewsTrain$Popular)
+
+NoTextRand = randomForest(Popular ~ NewsDesk+SectionName+SubsectionName+Weekday+WordCount+hour+IsQ, data=NewsTrain,importance=T)
+#default mtry = 8, OOB = 0.822
+
+#train
+PredTrainNoTextRand = predict(NoTextRand, newdata=NewsTrain,type = "prob")
+#table(PredTrainAllRand[,2]>=0.5)
+tbl<-table(NewsTrain$Popular,PredTrainNoTextRand[,2]>=0.5)
+sum(diag(tbl))/sum(tbl)
+
+# train AUC
+RocTrain <- prediction(PredTrainNoTextRand[,2],NewsTrain$Popular)
+#perf<- performance(RocTrainLog, "tpr", "fpr")
+#plot(perf)
+aucTrain <- as.numeric(performance(RocTrain,"auc")@y.values)
+aucTrain
+
+
+
+
+## Exploring the data 
+```{r}
+summary(NewsTest)
+
+# Baseline model on training set 
+table(NewsTrain$Popular)
+# proportion of popular articles 
+table(NewsTrain$Popular)[2]/nrow(NewsTrain)
+accBase <- 5439 / nrow(NewsTrain)
+accBase
+# any dependence on Weekday, less on weekend
+table(NewsTrain$Weekday,NewsTrain$Popular)
+```
+
+
+## Building models 
+We can't compute the accuracy or AUC on the test set ourselves, since we don't have the dependent variable on the test set (you can compute it on the training set though!). 
+* Baseline: 0.8326699
+* Log ~ WordCount : 0.8222596, AUC=0.7361707
+* Cart ~ WordCount: 0.8433864, AUC = 0.6940199
+* Log ~ WordCount + Headline Words: 0.8274648, AUC = 0.7898769
+* Log ~ WordCount + Headline Words + Weekday, 0.8276179, 0.7894969
+* Random Forest ~ Word Count + Headline Words: 0.8403246
+* Random Forest ~ Word Count + Headline Words + Weekday: 0.8490508
+* using mtry = 6 0.8490508
+
+### Simple model using only WordCount
+
+```{r}
+# simple log model 
+SimpleLog = glm(Popular ~ WordCount, data=NewsTrain, family=binomial)
+summary(SimpleLog)
+# And then make predictions on the test set:
+PredTestLog = predict(SimpleLog, newdata=NewsTest,type="response")
+MySubmission = data.frame(UniqueID = NewsTest$UniqueID, Probability1 = PredTestLog)
+#View(MySubmission)
+write.csv(MySubmission, "SubmissionSimpleLog.csv", row.names=FALSE)
+
+# Calculate the accuracy on training set 
+PredTrainLog <- predict(SimpleLog,newdata = NewsTrain,type = "response")
+tbl <- table(NewsTrain$Popular,PredTrainLog>=0.5)
+accTrain <-sum(diag(tbl))/sum(tbl) 
+accTrain
+# auc 
+library(ROCR)
+RocTrainLog <- prediction(PredTrainLog,NewsTrain$Popular)
+aucTrain <- as.numeric(performance(RocTrainLog,"auc")@y.values)
+aucTrain
+
+
+# log model using    "Weekday"        "NewsDesk"       "SectionName"    "SubsectionName" 
+
+SimpleLog2 = glm(Popular ~ NewsDesk+SectionName+SubsectionName+Weekday+WordCount, data=NewsTrain, family=binomial)
+summary(SimpleLog2)
+PredTestLog2 = predict(SimpleLog2, newdata=NewsTest,type="response")
+table(PredTestLog2>=0.5)
+MySubmission = data.frame(UniqueID = NewsTest$UniqueID, Probability1 = PredTestLog2)
+#View(MySubmission)
+write.csv(MySubmission, "SubmissionSimpleLog2.csv", row.names=FALSE)
+# Simple cart model using    "Weekday"        "NewsDesk"       "SectionName"    "SubsectionName"
+library(rpart)
+library(rpart.plot)
+
+# cart model using    "Weekday"        "NewsDesk"       "SectionName"    "SubsectionName" 
+SimpleCart <- rpart(Popular ~ NewsDesk+SectionName+SubsectionName+Weekday, data=NewsTrain, method = "class",cp=0.005)
+prp(SimpleCart)
+
+PredTrainCart <- predict(SimpleCart,newdata = NewsTrain,type = "prob")
+PredTestCart <- predict(SimpleCart,newdata = NewsTest,type = "prob")
+tbl <- table(NewsTrain$Popular,PredTrainCart[,2]>=0.5)
+accTrain <-sum(diag(tbl))/sum(tbl) 
+accTrain
+RocTrain <- prediction(PredTrainCart[,2],NewsTrain$Popular)
+aucTrain <- as.numeric(performance(RocTrain,"auc")@y.values)
+aucTrain
+```
+
+### Text analytics on Headline
+```{r}
+
+library(tm)
+
+
+HStopWords <- c(stopwords("english"), "make","makes", "million",  "springsummer" ,   "paris",  "time", "times", "get","gets",  "getting", "bank" ,"year", "say", "says", "art", "raise","raised","raising", "raises", "big", "billion", "small", "show", "shows", "showing", "take", "takes", "taking")
+AStopWords <- c(stopwords("english"), "take","takes","taking","work","works","working", "world",  "one",   "share", "sharing","shares", "bank", "banks", "look", "looks", "looking", "year", "years", "companies", "company", "plan", "plans", "planing", "now", "last", "citi","citys", "city",  "cities", "collect","collected","collects", "collection", "way", "like", "likes", "liked", "include","including","includes", "united", "unit", "group", "million", "business", "businesses", "help", "helps", "helping", "helped", "use", "uses", "useful", "using", "say", "says", "american", "americans", "houses", "housing", "said", "obama", "day", "days", "offers", "offer", "executes", "executive", "execute", "show", "shown", "shows", "make", "makes", "making", "two", "get", "gets", "getting") 
+
+ 
+
+#New
+MyStopWords <- c(stopwords("english"), "art", "appear", "archived","archive","articles","article","back","billion","business","book", "best","call","collect","collected","collects", "collection",  "come", "china", "daily","diary", "editor","first","former", "found", "fund", "highlight","highlighted","highlighting","herald","house", "include", "just","look","last", "may", "make", "management", "market", "million", "morning", "now", "open", "paris", "public", "pictures", "pictured", "raise", "springsummer","small", "show",  "take","time","tribune",  "united", "way", "will","work", "one","bank", "say", "says")
+
+
+# old
+MyStopWords <- c(stopwords("english"), "art", "appear", "archived","archive","articles","article","back","billion","business","book", "best","call","collect","collected","collects", "come", "china", "dailies","diaries", "editor","first","financial", "former", "found", "fund", "highlight","highlighted","highlighting","herald","house", "include","investor", "just","look","last", "may", "make", "management", "markset", "million", "morning", "now", "open","pairing", "public", "pictures","pictured", "raise", "springsummer","small", "show", "take","time","tribune",  "united", "way", "will","work", "word") 
+
+CorpusHeadline = Corpus(VectorSource(News$Headline))
+CorpusHeadline = tm_map(CorpusHeadline, tolower)
+CorpusHeadline = tm_map(CorpusHeadline, PlainTextDocument)
+CorpusHeadline = tm_map(CorpusHeadline, removePunctuation)
+CorpusHeadline = tm_map(CorpusHeadline, removeWords, HStopWords)
+#CorpusHeadline = tm_map(CorpusHeadline, removeWords, stopwords("english"))
+CorpusHeadline = tm_map(CorpusHeadline, stemDocument)
+CorpusHeadline = tm_map(CorpusHeadline, removeNumbers)
+dtmHeadline = DocumentTermMatrix(CorpusHeadline,control = list(weighting = function(x) weightTfIdf(x, normalize = FALSE)))
+sparseHeadline = removeSparseTerms(dtmHeadline, 0.99)
+HeadlineWords = as.data.frame(as.matrix(sparseHeadline))
+rownames(HeadlineWords)<-NULL
+colnames(HeadlineWords) = make.names(colnames(HeadlineWords))
+# add prefix "H" to Headline Words
+colnames(HeadlineWords) = paste0("H", colnames(HeadlineWords))
+
+HeadlineWords$WordCount = log(News$WordCount+1)
+HeadlineWords$Weekday = News$Weekday
+HeadlineWords$hour = News$hour
+HeadlineWords$NewsDesk <- News$NewsDesk
+HeadlineWords$SectionName <- News$SectionName
+HeadlineWords$SubsectionName <- News$SubsectionName
+
+# Now we need to split the observations back into the training set and testing set.
+HeadlineWordsTrain = head(HeadlineWords, nrow(NewsTrain))
+HeadlineWordsTest = tail(HeadlineWords, nrow(NewsTest))
+rownames(HeadlineWordsTest)<-NULL
+# Add dependent variable for Train
+HeadlineWordsTrain$Popular = NewsTrain$Popular
+
+
+
+```
+
+### Models using Headline and all other variables 
+
+```{r}
+# Log model 
+HeadlineOtherLog = glm(Popular ~ ., data=HeadlineWordsTrain, family=binomial)
+PredTrainHeadlineOtherLog = predict(HeadlineOtherLog, newdata=HeadlineWordsTrain, type="response")
+PredTestHeadlineOtherLog = predict(HeadlineOtherLog, newdata=HeadlineWordsTest, type="response")
+table(PredTrainHeadlineOtherLog>=0.5)
+table(PredTestHeadlineOtherLog>=0.5)
+MySubmission = data.frame(UniqueID = NewsTest$UniqueID, Probability1 = PredTestHeadlineOtherLog)
+write.csv(MySubmission, "SubmissionHeadlineOtherLog_Sparse99.csv", row.names=FALSE)
+
+tbl <- table(HeadlineWordsTrain$Popular,PredTrainHeadlineOtherLog>=0.5)
+accTrainLog <-sum(diag(tbl))/sum(tbl) 
+accTrainLog
+
+library(ROCR)
+RocTrainLog <- prediction(PredTrainHeadlineOtherLog,HeadlineWordsTrain$Popular)
+perf<- performance(RocTrainLog, "tpr", "fpr")
+plot(perf)
+aucTrainLog <- as.numeric(performance(RocTrainLog,"auc")@y.values)
+aucTrainLog
+
+
+
+# cv for cart
+library(caret)
+library(e1071)
+trControl = trainControl(method = "cv",number=10)
+cpGrid = expand.grid(.cp=seq(0.001,0.003,0.0001))
+tr = train(Popular~.,data = HeadlineWordsTrain, method = "rpart", trControl = trControl, tuneGrid = cpGrid)
+tr
+
+# cart 
+HeadlineOtherCart = rpart(Popular ~ ., data=HeadlineWordsTrain, method="class",cp=0.002)
+PredTestHeadlineOtherCart = predict(HeadlineOtherCart, newdata=HeadlineWordsTest, type="prob")
+prp(HeadlineOtherCart)
+table(PredTestHeadlineOtherCart[,2]>=0.5)
+
+# random forest (so far the best)
+library(randomForest)
+HeadlineRand = randomForest(Popular ~ ., data=HeadlineWordsTrain,important=TRUE)
+# importance gives the relative importance for each variable
+importance(HeadlineRand)
+varImpPlot(HeadlineRand)
+PredTestHeadlineOtherRand = predict(HeadlineOtherRand, newdata=HeadlineWordsTest)
+PredTestHeadlineOtherRand = predict(HeadlineOtherRand, newdata=HeadlineWordsTest,type = "prob")
+table(PredTestHeadlineOtherRand[,2]>=0.5)
+PredTestHeadlineOtherRand
+MySubmission = data.frame(UniqueID = NewsTest$UniqueID, Probability1 = PredTestHeadlineOtherRand[,2])
+write.csv(MySubmission, "SubmissionHeadlineOtherRand1000.csv", row.names=FALSE)
+
+# cross validation for rf 
+trControl = trainControl(method = "cv",number=10)
+cpGrid = expand.grid(.cp=seq(0.001,0.003,0.0001))
+tr = rfcv(Popular~.,data = HeadlineWordsTrain, method = "rf", trControl = trControl, tuneGrid = cpGrid)
+tr
+
+
+```
+
+
+
+
+### text analytics for Abstract 
+```{r}
+CorpusAbs = Corpus(VectorSource(News$Abstract))
+CorpusAbs = tm_map(CorpusAbs, tolower)
+CorpusAbs= tm_map(CorpusAbs, PlainTextDocument)
+CorpusAbs = tm_map(CorpusAbs, removePunctuation)
+CorpusAbs = tm_map(CorpusAbs, removeWords, AStopWords)
+#CorpusAbs = tm_map(CorpusAbs, removeWords, stopwords("english"))
+CorpusAbs = tm_map(CorpusAbs, stemDocument)
+CorpusAbs = tm_map(CorpusAbs, removeNumbers)
+dtmAbs = DocumentTermMatrix(CorpusAbs,control = list(weighting = function(x) weightTfIdf(x, normalize = FALSE)))
+sparseAbs = removeSparseTerms(dtmAbs, 0.98)
+AbsWords = as.data.frame(as.matrix(sparseAbs))
+colnames(AbsWords) = make.names(colnames(AbsWords))
+colnames(AbsWords) = paste0("A", colnames(AbsWords))
+
+
+
+AbsWords$WordCount = log(News$WordCount+1)
+AbsWords$Weekday = News$Weekday
+AbsWords$hour = News$hour
+AbsWords$NewsDesk <- News$NewsDesk
+AbsWords$SectionName <- News$SectionName
+AbsWords$SubsectionName <- News$SubsectionName
+
+# Now we need to split the observations back into the training set and testing set.
+AbsWordsTrain = head(AbsWords, nrow(NewsTrain))
+AbsWordsTest = tail(AbsWords, nrow(NewsTest))
+rownames(AbsWordsTest)<-NULL
+# Add dependent variable for Train
+AbsWordsTrain$Popular = NewsTrain$Popular
+
+# random forest (so far the best)
+library(randomForest)
+AbsRand = randomForest(Popular ~ ., data=AbsWordsTrain)
+importance(AbsRand)
+
+
+# combine HeadlineWords and AbsWords
+AllWords <- cbind(HeadlineWords,AbsWords)
+rownames(AllWords)<-NULL
+AllWords$WordCount = News$WordCount
+AllWords$Weekday = News$Weekday
+AllWords$hour = News$hour
+AllWords$NewsDesk <- News$NewsDesk
+AllWords$SectionName <- News$SectionName
+AllWords$SubsectionName <- News$SubsectionName
+AllWords$IsQ <- News$IsQ
+
+# Now we need to split the observations back into the training set and testing set.
+AllWordsTrain = head(AllWords, nrow(NewsTrain))
+AllWordsTest = tail(AllWords, nrow(NewsTest))
+rownames(AllWordsTest)<-NULL
+# Add dependent variable for Train
+AllWordsTrain$Popular = NewsTrain$Popular
+
+
+# random forest (so far the best)
+library(randomForest)
+AllRand = randomForest(Popular ~ ., data=AllWordsTrain,importance=T)
+
+#default mtry = 8, OOB = 0.822
+
+#train
+PredTrainAllRand = predict(AllRand, newdata=AllWordsTrain,type = "prob")
+#table(PredTrainAllRand[,2]>=0.5)
+tbl<-table(AllWordsTrain$Popular,PredTrainAllRand[,2]>=0.5)
+sum(diag(tbl))/sum(tbl)
+
+# train AUC
+RocTrain <- prediction(PredTrainAllRand[,2],AllWordsTrain$Popular)
+#perf<- performance(RocTrainLog, "tpr", "fpr")
+#plot(perf)
+aucTrain <- as.numeric(performance(RocTrain,"auc")@y.values)
+aucTrain
+
+#test
+PredTestAllRand = predict(AllRand, newdata=AllWordsTest,type = "prob")
+tbl<-table(PredTestAllRand[,2]>=0.5)
+
+#new predict
+Pred<-predict(AllRand,type="prob")
+RocTrain <- prediction(Pred[,2],AllWordsTrain$Popular)
+aucTrain <- as.numeric(performance(RocTrain,"auc")@y.values)
+aucTrain
+Compare <- cbind(Pred[,2], PredTrainAllRand[,2])
+# importance gives the relative importance for each variable
+varImpPlot(AllRand)
+
+varImp<-importance(AllRand)
+sort(varImp[,1])
+
+MySubmission = data.frame(UniqueID = NewsTest$UniqueID, Probability1 = PredTestAllRand[,2])
+write.csv(MySubmission, "SubmissionRandH99A98var57mtry7.csv", row.names=FALSE)
+
+
+
+# tune Random Forest 
+tune = tuneRF(x=AllWordsTrain[c(1:57)],  y= AllWordsTrain$Popular, mtryStart=8)
+tune
+plot(tune)
+
+
+#rf.cv <- rfcv(x=AllWordsTrain[c(1:71)], y= AllWordsTrain$Popular, cv.fold=10)
+
+#with(rf.cv, plot(n.var, error.cv))
+
+library(caret)
+
+trControl=trainControl(method="boot",number=10)
+mtryGrid <- expand.grid(.mtry = seq(4,20,by=4))
+rfTune<- train(Popular ~ ., data = AllWordsTrain, method = "rf", trControl = trControl,tuneGrid = mtryGrid)
+
+# another cv 
+library(ROCR)
+
+install.packages("pROC")
+library(pROC)
+trControl <- trainControl(classProbs = TRUE, summaryFunction = twoClassSummary)
+mtryGrid <- expand.grid(.mtry = seq(4,20,by=4))
+tr = train(Popular~., data = AllWordsTrain, method="rf", nodesize=5, ntree=500, metric="ROC", trControl=trControl)
+
+
+# logistic (0.918 vs. 0.928 for rf)
+
+AllLog= glm(Popular ~ ., data=AllWordsTrain, family = binomial)
+summary(AllLog)
+
+#train
+PredTrainAllLog = predict(AllLog, newdata=AllWordsTrain,type="response")
+table(PredTrainAllLog>=0.5)
+#test
+PredTestAllLog = predict(AllLog, newdata=AllWordsTest,type = "response")
+table(PredTestAllLog>=0.5)
+
+MySubmission = data.frame(UniqueID = NewsTest$UniqueID, Probability1 = PredTestAllLog)
+write.csv(MySubmission, "SubmissionAllLogHead99Abs98MySWords.csv", row.names=FALSE)
+```
+
+### Ideas: 
+* change wordcount to log (wordcount+1) (tried)
+* bag of words of snippet or abstract (but distinguish words from headline by adding a prefix) (tried)
+
+colnames(HeadlineWords) = paste("H", colnames(HeadlineWords))
+#colnames(HeadlineWords) = make.names(colnames(HeadlineWords))
+row.names=NULL
+
+
+* choose  words with higher importance (?)
+* tune RF 
+* combining RF and glm 

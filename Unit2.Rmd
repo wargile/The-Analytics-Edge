@@ -1,0 +1,194 @@
+---
+title: "The Analytics Edge (Unit 2)"
+author: "Na Sai"
+date: "March 22, 2015"
+output: html_document
+---
+# Lectures
+## L1. An Introduction to Linear Regression 
+1.
+```{r}
+y <- function(x){ 
+  3*x+2
+  }
+y(0)
+SSE <- (2-y(0))^2 + (2-y(1))^2 + (8-y(1))^2
+SSE
+SST = (2-4)^2 + (2-4)^2 + (8-4)^2
+SST
+Rsquare = 1- SSE/SST 
+Rsquare
+```
+4. 
+In R, use the dataset wine.csv to create a linear regression model to predict Price using HarvestRain and WinterRain as independent variables. Using the summary output of this model, answer the following questions:
+```{r}
+wine<-read.csv("wine.csv")
+str(wine)
+model <- lm(Price ~ HarvestRain + WinterRain, data = wine)
+summary(model)
+#what is the correlation between HarvestRain and WinterRain?
+cor(wine$HarvestRain,wine$WinterRain)
+```
+
+## L2. Moneyball:The power of Sports Analytics
+### Quick question
+```{r}
+#If a baseball team scores 713 runs and allows 614 runs, how many games do we expect the team to win?
+baseball <- read.csv("baseball.csv")
+moneyball <- subset(baseball,Year < 2002)
+str(moneyball)
+moneyball$RD = moneyball$RS - moneyball$RA
+str(moneyball)
+plot(moneyball$RD, moneyball$W)
+WinsReg = lm(W~RD,data = moneyball)
+summary(WinsReg)
+
+```
+
+# Assignment 2 
+## 1. Climate Change 
+There have been many studies documenting that the average global temperature has been increasing over the last century. The consequences of a continued rise in global temperature will be dire. Rising sea levels and an increased frequency of extreme weather events will affect billions of people.
+
+In this problem, we will attempt to study the relationship between average global temperature and several other factors.
+
+The file climate_change.csv contains climate data from May 1983 to December 2008. 
+```{r}
+climate<-read.csv("climate_change.csv")
+str(climate)
+### Problem 1.1 - Creating Our First Model
+climateTrain <- subset(climate, Year<=2006)
+model<- lm(Temp ~ MEI + CO2 + CH4 + N2O + CFC.11 + CFC.12 + TSI + Aerosols, data=climateTrain)
+summary(model)
+# Problem 2.2 - Understanding the Model
+cor(climateTrain)
+modelReduc<-lm(Temp ~ MEI + N2O + TSI + Aerosols, data=climateTrain)
+summary(modelReduc)
+#Problem 4 - Automatically Building the Model
+modelSim<-step(model)
+summary(modelSim)
+# Problem 5 - Testing on Unseen Data 
+climateTest <- subset(climate, Year>2006)
+predTemp <- predict(modelSim, newdata=climateTest)
+predTemp
+SSE <- sum((climateTest$Temp - predTemp)^2)
+SST <- sum((climateTest$Temp -mean(climateTrain$Temp))^2)
+1-SSE/SST 
+```
+## 2. Reading Test Scores
+The Programme for International Student Assessment (PISA) is a test given every three years to 15-year-old students from around the world to evaluate their performance in mathematics, reading, and science. This test provides a quantitative way to compare the performance of students from different parts of the world. In this homework assignment, we will predict the reading scores of students from the United States of America on the 2009 PISA exam.
+
+The datasets pisa2009train.csv and pisa2009test.csv contain information about the demographics and schools for American students taking the exam, derived from 2009 PISA Public-Use Data Files distributed by the United States National Center for Education Statistics (NCES). While the datasets are not supposed to contain identifying information about students taking the test, by using the data you are bound by the NCES data use agreement, which prohibits any attempt to determine the identity of any student in the datasets.
+```{r}
+pisaTrain<-read.csv("pisa2009train.csv") 
+pisaTest<-read.csv("pisa2009test.csv") 
+dim(pisaTrain)
+dim(pisaTest)
+# Problem 1.2 - Summarizing the DataSet
+tapply(pisaTrain$readingScore,pisaTrain$male,mean)
+#Problem 1.3 - Locating missing values
+summary(pisaTrain)
+#Problem 1.4 - Removing missing values 
+pisaTrain = na.omit(pisaTrain)
+pisaTest = na.omit(pisaTest)
+dim(pisaTrain)
+dim(pisaTest)
+```
+### Problem 2.2 - Unordered factors in regression models 
+To include unordered factors in a linear regression model, we define one level as the "reference level" and add a binary variable for each of the remaining levels. In this way, a factor with n levels is replaced by n-1 binary variables. The reference level is typically selected to be the most frequently occurring level in the dataset.
+### Problem 3.1-2 - Building a model
+```{r}
+pisaTrain$raceth = relevel(pisaTrain$raceeth,"White")
+pisaTest$raceth = relevel(pisaTest$raceeth,"White")
+lmScore <- lm(readingScore ~ ., data = pisaTrain)
+summary(lmScore)
+RMSE <- sqrt(sum(residuals(lmScore)^2)/dim(pisaTrain)[1])
+RMSE
+```
+###Problem 3.3 - Comparing predictions for similar students
+Consider two students A and B. They have all variable values the same, except that student A is in grade 11 and student B is in grade 9. What is the predicted reading score of student A minus the predicted reading score of student B?
+```{r}
+coef(lmScore)[2]*(11-9)
+```
+### Problem 4.1 - Predicting on unseen data
+```{r}
+predScore <- predict(lmScore,newdata = pisaTest)
+summary(predScore)
+summary(predScore)[6] - summary(predScore)[1]
+#What is the sum of squared errors (SSE) of lmScore on the testing set?
+SSE = sum((predScore - pisaTest$readingScore)^2)
+SSE
+#What is the root-mean squared error (RMSE) of lmScore on the testing set?
+RMSE = sqrt(SSE/dim(pisaTest)[1])
+RMSE 
+#What is the predicted test score used in the baseline model? 
+mean(pisaTrain$readingScore)
+#What is the sum of squared errors of the baseline model on the testing set?
+SST = sum((pisaTest$readingScore - mean(pisaTrain$readingScore))^2)
+SST
+#What is the test-set R-squared value of lmScore?
+1 - SSE/SST
+```
+
+## 3. Detecting Flu Epidemics via Search Engine Query Data 
+The U.S. Centers for Disease Control and Prevention (CDC) and the European Influenza Surveillance Scheme (EISS) detect influenza activity through virologic and clinical data, including Influenza-like Illness (ILI) physician visits. Reporting national and regional data, however, are published with a 1-2 week lag.
+
+The Google Flu Trends project was initiated to see if faster reporting can be made possible by considering flu-related online search queries -- data that is available almost immediately.
+
+```{r}
+#Looking at the time period 2004-2011, which week corresponds to the highest percentage of ILI-related physician visits?
+fluTrain <- read.csv("FluTrain.csv")
+str(fluTrain)
+which.max(fluTrain$ILI)
+fluTrain$Week[303]
+which.max(fluTrain$Queries)
+hist(fluTrain$ILI,xlab = "percentage of ILI-related physician visits for the corresponding week",main=" Histogram of the dependent variable, ILI")
+plot(fluTrain$Queries, log(fluTrain$ILI),main="ILI versus Queries",ylab="log(ILI)",xlab="Queries")
+```
+### Problem 2.1 - Linear Regression Model
+```{r}
+FluTrend1 <- lm(log(ILI)~Queries,data = fluTrain)
+summary(FluTrend1)
+cor(log(fluTrain$ILI),fluTrain$Queries)
+#cor^2 = R-squared
+```
+### Problem 3.1 - Performance on the Test Set
+```{r}
+fluTest<-read.csv("FluTest.csv")
+PredTest1 <- exp(predict(FluTrend1,newdata = fluTest))
+#What is our estimate for the percentage of ILI-related physician visits for the week of March 11, 2012?
+PredTest1[which(fluTest$Week=='2012-03-11 - 2012-03-17')]
+#What is the relative error betweeen the estimate (our prediction) and the observed value for the week of March 11, 2012?
+week<-which(fluTest$Week=='2012-03-11 - 2012-03-17')
+(fluTest$ILI[week] - PredTest1[week])/fluTest$ILI[week]
+#What is the Root Mean Square Error (RMSE) between our estimates and the actual observations for the percentage of ILI-related physician visits, on the test set?
+RMSE = sqrt(sum((PredTest1 - fluTest$ILI)^2)/dim(fluTest)[1])
+RMSE  
+```
+### Problem 4.1 - Training a Time Series Model
+The observations in this dataset are consecutive weekly measurements of the dependent and independent variables. This sort of dataset is called a "time series." Often, statistical models can be improved by predicting the current value of the dependent variable using the value of the dependent variable from earlier weeks. In our models, this means we will predict the ILI variable in the current week using values of the ILI variable from previous weeks.To do so, we will use the "zoo" package, which provides a number of helpful methods for time series models.
+```{r}
+#install.packages("zoo")
+library(zoo)
+ILILag2 <- lag(zoo(fluTrain$ILI), -2, na.pad = TRUE)
+fluTrain$ILILag2 <- coredata(ILILag2)
+#How many values are missing in the new ILILag2 variable?
+table(is.na(fluTrain$ILILag2))
+plot(log(fluTrain$ILILag2),log(fluTrain$ILI),main= ' ILILag2 vs. ILI',xlab = 'log(ILI)',ylab = 'log(ILILag2)')
+#Train a linear regression model on the FluTrain dataset to predict the log of the ILI variable using the Queries variable as well as the log of the ILILag2 variable.
+FluTrend2 <- lm(log(ILI)~Queries + log(ILILag2), data = fluTrain)
+summary(FluTrend2)
+```
+### Problem 5.1 - Evaluating the Time Series Model in the Test Set 
+```{r}
+ILILag2<-lag(zoo(fluTest$ILI), -2, na.pad = TRUE)
+fluTest$ILILag2 <- coredata(ILILag2)
+table(is.na(fluTest$ILILag2))
+#In this problem, the training and testing sets are split sequentially -- the training set contains all observations from 2004-2011 and the testing set contains all observations from 2012.
+#Fill in the missing values for ILILag2 in FluTest. 
+fluTest$ILILag2[1] = fluTrain$ILI[dim(fluTrain)[1]-1]
+fluTest$ILILag2[2] = fluTrain$ILI[dim(fluTrain)[1]]
+#Obtain test set predictions of the ILI variable from the FluTrend2 model
+PredTest2 <- exp(predict(FluTrend2,newdata = fluTest))
+RMSE <- sqrt(sum((PredTest2 - fluTest$ILI)^2)/dim(fluTest)[1])
+RMSE
+```

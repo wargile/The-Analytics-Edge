@@ -1,0 +1,293 @@
+---
+title: "The Analytics Edge (Unit 4)"
+author: "Na Sai"
+date: "April 5, 2015"
+output: html_document
+---
+
+# Assignment 4 
+## 4.1 understanding why people vote
+
+In August 2006 three researchers (Alan Gerber and Donald Green of Yale University, and Christopher Larimer of the University of Northern Iowa) carried out a large scale field experiment in Michigan, USA to test the hypothesis that one of the reasons people vote is social, or extrinsic, pressure. In this homework problem we will use both logistic regression and classification trees to analyze the data they collected.
+
+The researchers grouped about 344,000 voters into different groups randomly - about 191,000 voters were a "control" group, and the rest were categorized into one of four "treatment" groups. These five groups correspond to five binary variables in the dataset.
+
+```{r}
+gerber <- read.csv("gerber.csv")
+nrow(gerber)
+str(gerber)
+#What proportion of people in this dataset voted in this election?
+table(gerber$voting)/nrow(gerber)
+#Which of the four "treatment groups" had the largest percentage of people who actually voted (voting = 1)?
+prop.table(table(gerber$voting[gerber$civicduty==1]))
+prop.table(table(gerber$voting[gerber$hawthorne==1]))
+prop.table(table(gerber$voting[gerber$self==1]))
+prop.table(table(gerber$voting[gerber$neighbors==1]))
+#nrow(gerber[which(gerber$voting == 0 & gerber$hawthorne==1),])
+
+#logistic regression model
+gerber.glm<- glm(voting ~ civicduty+hawthorne+self+neighbors, data = gerber, family = "binomial")
+summary(gerber.glm)
+
+prediction.glm <- predict(gerber.glm, type = "response")
+# accuracy 
+table(gerber$voting, prediction.glm >= 0.3)
+(134513 + 51966)/(134513 + 51966 + 100875 + 56730)
+table(gerber$voting, prediction.glm >= 0.5)
+235388 / (235388 + 108696 )
+
+# baseline model accuracy 
+prop.table(table(gerber$voting))
+
+# AUC 
+library(ROCR)
+prediction.roc <- prediction(prediction.glm,gerber$voting)
+auc = as.numeric(performance(prediction.roc,"auc")@y.values)
+auc
+
+# tree
+library(rpart)
+library(rpart.plot)
+gerber.cart <- rpart(voting ~ civicduty+hawthorne+self+neighbors, data = gerber)
+prp(gerber.cart)
+
+# tree with cp = 0.0 (force the complete tree to be built) 
+gerber.cart.cp  <- rpart(voting ~ civicduty+hawthorne+self+neighbors, data = gerber,cp = 0.0)
+prp(gerber.cart.cp)
+
+# new tree including the sex variable
+gerber.cart.cp.sex  <- rpart(voting ~ civicduty+hawthorne+self+neighbors+sex, data = gerber,cp = 0.0)
+prp(gerber.cart.cp.sex)
+
+#In the control group, which gender is more likely to vote? (1 = female, 0 = male)
+table(gerber$voting[gerber$control==1],gerber$sex[gerber$control==1])
+#In the "Civic Duty" group, which gender is more likely to vote?
+table(gerber$voting[gerber$civicduty==1],gerber$sex[gerber$civicduty==1])
+
+# tree only with control variable 
+gerber.control.cart <- rpart(voting ~ control, data = gerber,cp = 0.0)
+prp(gerber.control.cart,digits=6)
+abs(0.296638 - 0.34)
+gerber.control.sex.cart <- rpart(voting ~ control+sex, data = gerber,cp = 0.0)
+prp(gerber.control.sex.cart,digits=6)
+
+# logistic model using "sex" and "control". 
+
+gerber.control.sex.glm<- glm(voting ~ control+sex, data = gerber, family = "binomial")
+summary(gerber.control.sex.glm)
+
+#Create the following dataframe (this contains all of the possible values of sex and control), and evaluate your logistic regression using the predict function
+Possibilities = data.frame(sex=c(0,0,1,1),control=c(0,1,0,1))
+predict(gerber.control.sex.glm, newdata=Possibilities, type="response")
+abs(0.2908065 - 0.290456)
+
+# add an interaction term to the logistic model 
+gerber.control.sex.int.glm<- glm(voting ~ sex + control + sex:control, data=gerber, family="binomial")
+summary(gerber.control.sex.int.glm)
+predict(gerber.control.sex.int.glm, newdata=Possibilities, type="response")
+abs(0.2904558 - 0.290456)
+```
+
+
+## 4.2 letter recognition
+```{r}
+letters<-read.csv("letters_ABPR.csv")
+str(letters)
+letters$isB=as.factor(letters$letter=="B")
+library(caTools)
+set.seed(1000)
+split <- sample.split(letters$isB,SplitRatio=0.5)
+letterBTrain <- subset(letters,split == TRUE)
+letterBTest <- subset(letters,split == FALSE)
+
+# baseline method that always predicts the most frequent outcome, which is "not B". What is the accuracy of this baseline method on the test set?
+table(letterBTest$isB)
+1175/(1175+383)
+
+# classification tree to predict whether a letter is a B or not 
+library(rpart)
+library(rpart.plot)
+letterB.cart <- rpart(isB ~. -letter, data = letterBTrain, method = "class")
+prp(letterB.cart)
+letterB.cart.pred<-predict(letterB.cart,newdata = letterBTest, type = "class")
+table(letterBTest$isB, letterB.cart.pred)
+
+# accuracy of the tree model 
+(340+1118)/(340+1118+57+43)
+
+# random forest model 
+
+library(randomForest)
+set.seed(1000)
+letterB.forest <- randomForest(isB ~.-letter,data = letterBTrain)
+letterB.forest.predict <- predict(letterB.forest,newdata = letterBTest,type = "class")
+table(letterBTest$isB,letterB.forest.predict)
+(1165+374)/(1165+10+9+374)
+
+# Now predicting letters A,B,P,R 
+letters$letter = as.factor(letters$letter)
+
+# splitting data based on letters$letter 
+set.seed(2000)
+split = sample.split(letters$letter,SplitRatio = 0.5)
+lettersTrain <- subset(letters,split == TRUE)
+lettersTest <- subset(letters,split ==FALSE)
+
+# baseline model 
+table(lettersTest$letter)
+401/(395+383+401+379)
+
+# tree model with multiclass classification 
+letters.cart <- rpart(letter ~.-isB, data = lettersTrain, method = "class")
+prp(letters.cart)
+letters.cart.pred<-predict(letters.cart,newdata = lettersTest, type = "class")
+tbl <- table(lettersTest$letter,letters.cart.pred)
+tbl
+#accuracy
+sum(diag(tbl))/sum(tbl)
+
+# forest with multiclass 
+letters.forest <- randomForest(letter ~.-isB, data = lettersTrain, method = "class")
+plot(letters.forest, lwd=2,main ="Error rate for the random forest model")
+
+# legend("topright",colnames(letters.forest$err.rate)[2:5],col=1:4,cex=0.8,fill=1:4)
+
+legend("topright", legend=unique(lettersTest$letter), col=unique(as.numeric(lettersTest$letter)), pch=19)
+letters.forest.pred<-predict(letters.forest,newdata = lettersTest, type = "class")
+tbl <- table(lettersTest$letter,letters.forest.pred)
+tbl
+sum(diag(tbl))/sum(tbl)
+
+
+
+```
+## 4.3 Predicting Earnings from census data
+The United States government periodically collects demographic information by conducting a census.In this problem, we are going to use census information about an individual to predict how much a person earns in particular, whether the person earns more than $50,000 per year
+
+```{r}
+census<-read.csv("census.csv")
+str(census)
+names(census)
+library(caTools)
+set.seed(2000)
+spl <- sample.split(census$over50k,SplitRatio = 0.6)
+censusTrain<-subset(census,spl == TRUE)
+censusTest<-subset(census,spl == FALSE)
+# log model 
+census.glm<-glm(over50k ~.,data = censusTrain,family = "binomial")
+summary(census.glm) 
+pred.glm <- predict(census.glm,newdata = censusTest,type="response")
+tbl<-table(censusTest$over50k,pred.glm >=0.5)
+sum(diag(tbl))/sum(tbl)
+#baseline model 
+table(censusTest$over50k)
+9713/(9713+3078)
+# AUC for log model 
+library(ROCR)
+roc.glm<-prediction(pred.glm,censusTest$over50k)
+perf = performance(roc.glm, "tpr", "fpr")
+plot(perf)
+Auc<-as.numeric(performance(roc.glm,"auc")@y.values)
+Auc
+
+# tree
+census.cart<-rpart(over50k~.,data = censusTrain, method="class")
+prp(census.cart)
+pred.cart<-predict(census.cart,newdata = censusTest,type="class")
+tbl<-table(censusTest$over50k,pred.cart)
+sum(diag(tbl))/sum(tbl)
+# auc
+pred.cart<-predict(census.cart,newdata = censusTest)
+roc.cart<-prediction(pred.cart[,2],censusTest$over50k)
+
+#pred = prediction(PredictROC[,2], Test$Reverse)
+perf = performance(roc.cart, "tpr", "fpr")
+plot(perf)
+Auc = as.numeric(performance(roc.cart, "auc")@y.values)
+Auc
+
+# random forest
+#downsizing the samples 
+set.seed(1)
+trainSmall = censusTrain[sample(nrow(censusTrain),2000),]
+set.seed(1)
+small.forest<-randomForest(over50k~.,data = trainSmall,method="class")
+pred.forest<-predict(small.forest, newdata = censusTest)
+tbl<-table(pred.forest,censusTest$over50k)
+sum(diag(tbl))/sum(tbl)
+
+# which variables are important.
+#One metric that we can look at is the number of times, aggregated over all of the trees in the random forest model, that a certain variable is selected for a split. 
+vu = varUsed(small.forest,count=TRUE)
+vusorted=sort(vu,decreasing=FALSE,index.return=TRUE)
+vusorted
+names(small.forest$forest$xlevels[vusorted$ix])
+dotchart(vusorted$x,names(small.forest$forest$xlevels[vusorted$ix]))
+
+#A different metric we can look at is related to "impurity", which measures how homogenous each bucket or leaf of the tree is. 
+varImpPlot(small.forest)
+
+# cross-validation
+library(caret)
+library(e1071)
+# Number of folds
+tr.control = trainControl(method = "cv", number = 10)
+# cp values
+cp.grid = expand.grid(.cp = seq(0.002,0.1,0.002)) 
+tr = train(over50k~.,data = censusTrain, method = "rpart", trControl = tr.control, tuneGrid = cp.grid)
+tr
+best.tree = tr$finalModel
+prp(best.tree)
+# tree
+censusCp.cart<-rpart(over50k~.,data = censusTrain, method="class",cp=0.002)
+predCP.cart<-predict(censusCp.cart,newdata = censusTest,type="class")
+tbl<-table(censusTest$over50k,predCP.cart)
+sum(diag(tbl))/sum(tbl)
+prp(censusCp.cart)
+```
+
+## 4.4 State data Revisited (OPTIONAL)
+```{r}
+statedata <- read.csv("statedataSimple.csv")
+str(statedata)
+
+#linear regression 
+state.lm<-lm(Life.Exp~.,data = statedata)
+summary(state.lm)
+statePred.lm<-predict(state.lm)
+sum((statePred.lm - statedata$Life.Exp)**2)
+
+#linear model using just Population, Murder, Frost, and HS.Grad as independent variables 
+state4var.lm<-lm(Life.Exp~Population+Murder+Frost+HS.Grad,data = statedata)
+summary(state4var.lm)
+sum((predict(state4var.lm) - statedata$Life.Exp)**2)
+
+# cart model 
+state.cart <- rpart(Life.Exp~.,data = statedata)
+prp(state.cart)
+sum((predict(state.cart) - statedata$Life.Exp)**2)
+# set minbucket 
+state.cart <- rpart(Life.Exp~.,data = statedata,minbucket=5)
+prp(state.cart)
+sum((predict(state.cart) - statedata$Life.Exp)**2)
+# using only Area, minbucket=1
+state.cart <- rpart(Life.Exp~Area,data = statedata,minbucket=1)
+prp(state.cart)
+sum((predict(state.cart) - statedata$Life.Exp)**2)
+
+# cv 
+library(caret)
+set.seed(111)
+tr.control = trainControl(method="cv",number=10)
+cp.grid =expand.grid(.cp=seq(0.01,0.5,0.01)) 
+train(Life.Exp~.,data = statedata,method = "rpart",trControl = tr.control, tuneGrid = cp.grid)
+state.cart <- rpart(Life.Exp~.,data = statedata,cp=0.12)
+prp(state.cart)
+sum((predict(state.cart) - statedata$Life.Exp)**2)
+
+# cv with only Area as independent variable
+train(Life.Exp~Area,data = statedata,method = "rpart",trControl = tr.control, tuneGrid = cp.grid)
+state.cart <- rpart(Life.Exp~Area,data = statedata,cp=0.03)
+prp(state.cart)
+sum((predict(state.cart) - statedata$Life.Exp)**2)
+```

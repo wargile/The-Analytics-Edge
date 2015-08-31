@@ -1,0 +1,328 @@
+---
+title: "The Analytics Edge (Final Exam)"
+author: "Na Sai"
+date: "May 21, 2015"
+output: html_document
+---
+# Final Exam
+
+## Problem 1. Forecasting Airline Delays
+
+On any given day, more than 87,000 flights take place in the United States alone. About one-third of these flights are commercial flights, operated by companies like United, American Airlines, and JetBlue. While about 80% of commercial flights take-off and land as scheduled, the other 20% suffer from delays due to various reasons. A certain number of delays are unavoidable, due to unexpected events, but some delays could hopefully be avoided if the factors causing delays were better understood and addressed.
+
+In this problem, we'll use a dataset of 9,381 flights that occured in June through August of 2014 between the three busiest US airports -- Atlanta (ATL), Los Angeles (LAX), and Chicago (ORD) -- to predict flight delays. The dataset AirlineDelay.csv includes the following 23 variables:
+```{r}
+Airlines <- read.csv("AirlineDelay.csv")
+str(Airlines)
+# split sample 
+set.seed(15071)
+spl <- sample(nrow(Airlines), 0.7*nrow(Airlines))
+AirlinesTrain <- Airlines[spl,]
+AirlinesTest <- Airlines[-spl,]
+#How many observations are in the training set AirlinesTrain?
+nrow(AirlinesTrain)
+#How many observations are in the testing set AirlinesTest?
+nrow(AirlinesTest)
+#Build a linear regression model to predict "TotalDelay" using all of the other variables as independent variables. Use the training set to build the model.
+Airlines.lm <- lm(TotalDelay~.,data = AirlinesTrain)
+summary(Airlines.lm)
+
+#What is the correlation between NumPrevFlights and PrevFlightGap in the training set?
+cor(Airlines$NumPrevFlights, Airlines$PrevFlightGap)
+#What is the correlation between OriginAvgWind and OriginWindGust in the training set?
+cor(Airlines$OriginAvgWind, Airlines$OriginWindGust)
+
+#In the linear regression model, given two flights that are otherwise identical, what is the absolute difference in predicted total delay given that one flight is on Thursday and the other is on Sunday?
+1.571501 - (-5.418356) 
+#In the linear regression model, given two flights that are otherwise identical, what is the absolute difference in predicted total delay given that one flight is on Saturday and the other is on Sunday?
+-4.506943 - (-5.418356) 
+#Make predictions on the test set using your linear regression model. What is the Sum of Squared Errors (SSE) on the test set?
+AirlinesPred.lm <- predict(Airlines.lm,newdata = AirlinesTest)
+SSE <- sum((AirlinesPred.lm - AirlinesTest$TotalDelay)^2)
+SSE
+#What is the Total Sum of Squares (SST) on the test set? Remember to use the mean total delay on the training set as the "baseline model".
+SST <- sum(( AirlinesTest$TotalDelay - mean(AirlinesTrain$TotalDelay))^2)
+SST
+#What is the R-squared on the test set?
+1-SSE / SST 
+
+
+#Let's turn this problem into a multi-class classification problem by creating a new dependent variable. Our new dependent variable will take three different values: "No Delay", "Minor Delay", and "Major Delay". Create this variable, called "DelayClass", in your dataset Airlines 
+
+Airlines$DelayClass = factor(ifelse(Airlines$TotalDelay == 0, "No Delay", ifelse(Airlines$TotalDelay >= 30, "Major Delay", "Minor Delay")))
+
+#How many flights in the dataset Airlines had no delay?
+table(Airlines$DelayClass)
+#remove the original dependent variable "TotalDelay" 
+Airlines$TotalDelay = NULL 
+
+library(caTools)
+set.seed(15071)
+spl<- sample.split(Airlines$DelayClass, SplitRatio = 0.7)
+AirlinesTrain <- subset(Airlines,spl==TRUE)
+AirlinesTest <- subset(Airlines,spl == FALSE) 
+# build a cart model 
+library(rpart)
+library(rpart.plot)
+Airlines.cart <- rpart(DelayClass~., data = AirlinesTrain,method = "class", minbucket  = 20, cp=0.01)
+summary(Airlines.cart)
+prp(Airlines.cart)
+
+#What is the accuracy on the training set of a baseline model that predicts the most frequent outcome (No Delay) for all observations?
+table(AirlinesTrain$DelayClass)
+3282/nrow(AirlinesTrain)
+
+#Make predictions on the training set, and then create a confusion matrix. What is the overall accuracy of the model? 
+
+TrainPred.rpart<- predict(Airlines.cart,newdata = AirlinesTrain,type = "class")
+tbl <- table(AirlinesTrain$DelayClass, TrainPred.rpart)
+TrainAcc<- sum(diag(tbl))/sum(tbl)
+TrainAcc
+
+#Make predictions on the testing set, and then create a confusion matrix. What is the overall accuracy of the model on the testing set?
+
+TestPred.rpart<- predict(Airlines.cart,newdata = AirlinesTest,type = "class")
+tbl <- table(AirlinesTest$DelayClass, TestPred.rpart)
+TestAcc<- sum(diag(tbl))/sum(tbl)
+TestAcc
+```
+
+
+## Probelm 2. Predicting Sales on eBay
+
+Individuals selling used items are often faced with a difficult choice -- should they try to sell the items through a yard/estate sale, a consignment shop, an auction, or some other means? Often, this choice will come down to the convenience of selling the items, the price the items can fetch, and the speed with which the items can be sold.
+
+To determine whether analytics can be used to help make this choice, we will look at whether data from previous auctions on eBay, a major online auction and shopping site, can be used to predict whether a new item will be sold at some target price. We will limit our attention to Christian Louboutin shoes, using data from nearly 4,000 auctions from late 2014. In this analysis, the dependent variable will be the binary outcome variable sold, which takes value 1 if the item was sold and 0 if it was not sold. We also include saleprice, which is the price the shoe sold at (NA for shoes that did not sell). For each item, the file ebay.csv contains the following independent variables:
+
+```{r}
+ebay<- read.csv("ebay.csv",stringsAsFactor = FALSE)
+str(ebay)
+#What proportion of all shoes were sold?
+table(ebay$sold)
+799/nrow(ebay)
+#Which of the numerical variables has at least one missing value?
+summary(ebay)
+
+#What is the most common shoe size in the dataset?
+table(ebay$size)
+summary(ebay$size)
+
+# convert to factors 
+ebay[c("sold", "condition","heel","style","color","material")] <- lapply(ebay[c("sold", "condition","heel","style","color","material")], as.factor)
+
+# splitting data 
+set.seed(144)
+library(caTools)
+spl = sample.split(ebay$sold,0.7)
+ebayTrain <- subset(ebay,spl== T)
+ebayTest <- subset(ebay,spl== F)
+
+# logistic
+ebay.glm<- glm(sold~biddable+startprice+condition+heel+style+color+material, data = ebayTrain,family = binomial)
+summary(ebay.glm)
+
+# test probability for the first case of training set
+ebayTrainPred.glm <- predict(ebay.glm, newdata = ebayTrain, type = "response")
+# test probability 
+coeff<- unname(coef(ebay.glm)[c("(Intercept)","biddable","startprice", "conditionPre-owned", "heelLow", "styleOpen Toe", "colorBlack", "materialSuede")])
+coeff
+value<- c(1,1,199,1,1,1,1,1)
+value
+z<- sum(coeff *value,na.rm=T)
+z
+p <-  1/(1+exp(-1*z)) 
+p
+
+# Problem 7 
+coeff<- unname(coef(ebay.glm)[c("(Intercept)","biddable","startprice", "conditionPre-owned", "heelHigh", "styleOpen Toe", "colorBlack", "materialSatin")])
+coeff
+value<- c(1,0,100,1,1,1,1,1)
+value
+z<- sum(coeff *value,na.rm=T)
+z
+p <- 1/(1+exp(-1*z)) 
+p
+odds <- exp(z)
+odds
+
+# odds for styleStiletto
+coeff<- unname(coef(ebay.glm)[c("(Intercept)","biddable","startprice", "conditionPre-owned", "heelHigh", "styleStiletto", "colorBlack", "materialSatin")])
+value<- c(1,0,100,1,1,1,1,1)
+z<- sum(coeff *value,na.rm=T)
+odds <- exp(z)
+odds
+
+# average
+averageOdds<- mean(c(0.3318138,0.7628905,0.5619798,0.2796025,0.530004,0.2637691))
+averageOdds
+
+# Test set prediction
+ebayTestPred.glm <- predict(ebay.glm, newdata = ebayTest, type = "response")
+table(ebayTest$sold, ebayTestPred.glm>=0.5)
+
+#On how many test set observations does your logistic regression model make a different prediction than the prediction the naive baseline model would make? 
+table(ebayTest$sold)
+table(as.numeric(ebayTestPred.glm>=0.5)==0)
+
+library(ROCR)
+ROC.glm <- prediction(ebayTestPred.glm, ebayTest$sold, label.ordering = NULL)
+auc.glm <- as.numeric(performance(ROC.glm, "auc")@y.values)
+auc.glm
+roc.perf = performance(ROC.glm,measure = "tpr",x.measure = "fpr")
+plot(roc.perf,colorize=TRUE)
+
+set.seed(144)
+library(caret)
+library(e1071)
+tr.control <- trainControl(method = "cv", number = 10)
+cp.grid <- expand.grid(.cp = seq(0.001,0.05,0.001))
+tr = train(sold~biddable+startprice+condition+heel+style+color+material, data = ebayTrain, method = "rpart", trControl = tr.control, tuneGrid = cp.grid)
+tr
+
+ebayTrain.cart <- rpart(sold ~ biddable+startprice+condition+heel+style+color+material, data = ebayTrain, method = "class", cp = 0.004)
+prp(ebayTrain.cart)
+#summary(ebayTrain.cart)
+
+# text analytics
+library(tm)
+corpus <- Corpus(VectorSource(ebay$description))
+corpus <- tm_map(corpus,tolower)
+corpus <- tm_map(corpus, PlainTextDocument)
+corpus<- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeWords, stopwords("english"))
+corpus <- tm_map(corpus, stemDocument)
+dtm<- DocumentTermMatrix(corpus)
+dtm
+spdtm<- removeSparseTerms(dtm, 0.8)
+spdtm
+
+#Convert spdtm to a data frame called descriptionText. Which word stem appears the most frequently across all descriptions? 
+descriptionText<- as.data.frame(as.matrix(spdtm))
+which.max(colSums(descriptionText))
+
+# names(descript)
+names(descriptionText) <- paste0("D",names(descriptionText))
+
+#Copy the following variables from the eBay data frame into descriptionText:
+
+variables<- c("sold","biddable","startprice","condition","heel","style","color","material")
+descriptionText[,variables] <- ebay[,variables]
+
+#Then, split descriptionText into a training set called trainText and a testing set called testText using the variable "spl" that was earlier used to split eBay into train and test.
+trainText<- subset(descriptionText,spl==T)
+testText<- subset(descriptionText,spl==F)
+
+#How many variables are in testText? 
+ncol(testText)
+
+# Using trainText, train a logistic regression model called glmText 
+glmText<- glm(sold~.,data = trainText,family = binomial)
+summary(glmText)
+
+#How many of the word frequencies from the description text (variables beginning with the letter "D") are significant at or below the p=0.05 level? 
+
+table(coef(summary(glmText))[,4][2:146]<=0.05)
+
+# What is the training-set AUC of the new logistic regression model?
+
+glmText.pred <- predict(glmText,newdata = trainText, type = "response")
+rocText<- prediction(glmText.pred, trainText$sold)
+aucTrain <- as.numeric(performance(rocText,"auc")@y.values)
+aucTrain
+
+#What is the test-set AUC of the new logistic regression model? 
+glmText.pred <- predict(glmText,newdata = testText, type = "response")
+rocText<- prediction(glmText.pred, testText$sold)
+aucTest<- as.numeric(performance(rocText,"auc")@y.values)
+aucTest
+```
+
+## Problem 3. Understanding Customers of Hubway
+In Unit 6, we saw how clustering can be used for market segmentation, the idea of dividing a broad target market of customers into smaller, more similar groups, and then designing a marketing strategy specifically for each group. In this problem, we'll see how the same idea can be applied using data from Hubway, a bike-sharing program in the Boston, Massachusetts area.
+
+Registered users of Hubway can check-out a bicycle from one of 140 stations located throughout the Metro-Boston area, and return the bike to any of the 140 stations. This enables users to take bikes on one-way trips throughout the city. Users pay a membership fee, which includes unlimited trips up to 30 minutes in duration at no additional cost. Trips longer than 30 minutes cost additional "overtime" fees. 
+
+In this problem, we'll use the dataset HubwayTrips.csv, which contains data from trips taken by registered users of Hubway from June 2012 through September 2012. The dataset contains the following seven variables:
+
+```{r}
+Hubway<-read.csv("HubwayTrips.csv")
+str(Hubway)
+
+#What is the average duration (in seconds) of all trips in this dataset?
+
+mean(Hubway$Duration)
+#What is the average duration (in seconds) of trips taken on the weekdays?
+mean(Hubway$Duration[Hubway$Weekday==1])
+# What is the average duration (in seconds) of trips taken on the weekends?
+mean(Hubway$Duration[Hubway$Weekday==0])
+
+#How many trips were taken in the morning?
+table(Hubway$Morning)
+
+#How many trips were taken in the afternoon?
+table(Hubway$Afternoon)
+#How many trips were taken in the evening?
+table(Hubway$Evening)
+
+#In this dataset, what proportion of trips are taken by male users?
+table(Hubway$Male)
+136506/nrow(Hubway)
+
+# normalize the variables 
+library(caret)
+preproc <- preProcess(Hubway)
+HubwayNorm <- predict(preproc,Hubway)
+
+#What is the maximum value of Duration in the normalized dataset?
+
+max(HubwayNorm$Duration)
+
+#What is the maximum value of Age in the normalized dataset?
+max(HubwayNorm$Age)
+
+#Run the k-means clustering algorithm on your normalized dataset, selecting 10 clusters. 
+set.seed(5000)
+KMC = kmeans(HubwayNorm, centers = 10)
+HubKMC = KMC$cluster
+sort(table(HubKMC))
+
+#Which cluster best fits the description "trips taken by female users on weekday evenings"?
+table(Hubway$Male ==0 & Hubway$Weekday==1 & Hubway$Evening==1)
+tapply(Hubway$Male, KMC$cluster, mean)
+tapply(Hubway$Weekday, KMC$cluster, mean)
+tapply(Hubway$Evening, KMC$cluster, mean)
+
+#Now, use the cluster assignments from k-means clustering together with the cluster centroids to answer the next few questions.
+
+#Which cluster best fits the description "leisurely (longer than average) afternoon trips taken on the weekends"?
+
+set1<-which(tapply(Hubway$Duration, KMC$cluster, mean) > mean(Hubway$Duration))
+set2<- which(tapply(Hubway$Weekday, KMC$cluster, mean) < 0.5)
+set3<- which(tapply(Hubway$Afternoon, KMC$cluster, mean) > 0.5)
+intersect(intersect(set1,set2),set3)
+
+#Which cluster best fits the description "morning trips taken by older male users"?
+
+set1<-which(tapply(Hubway$Age, KMC$cluster, mean) > mean(Hubway$Age))
+set2<- which(tapply(Hubway$Male, KMC$cluster, mean) > 0.5)
+set3<- which(tapply(Hubway$Morning, KMC$cluster, mean) > 0.5)
+intersect(intersect(set1,set2),set3)
+
+set.seed(8000)
+KMC = kmeans(HubwayNorm, centers = 20)
+HubKMC = KMC$cluster
+sort(table(HubKMC))
+
+#Which clusters can be described as "shorter than average trips that occur on weekday evenings"?
+
+set1<-which(tapply(Hubway$Duration, KMC$cluster, mean) < mean(Hubway$Duration))
+set2<- which(tapply(Hubway$Weekday, KMC$cluster, mean) > 0.5)
+set3<- which(tapply(Hubway$Evening, KMC$cluster, mean) > 0.5)
+
+intersect(intersect(set1,set2),set3)
+
+```
+## Problem 4. optimal production Scheduling
+
+Falcon Die Casting Company (FDC) is an automotive parts manufacturer based in the United States. FDC uses an innovative method of high volume die casting, a metal casting process that is characterized by forcing molten metal under high pressure into a mold cavity. Due to the strength of their method, FDC recently received a long-term contract from a major automobile manufacturer to produce the five key die cast items used in most of their automobiles.
+
